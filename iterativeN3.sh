@@ -585,7 +585,7 @@ cp -f ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/bmask_fix.mnc
 antsRegistration_affine_SyN.sh --clobber --verbose \
     --fast --mask-extract \
     --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-    --skip-affine --fixed-mask ${REGISTRATIONMODELMASK} --moving-mask ${tmpdir}/${n}/bmask_fix.mnc \
+    --skip-linear --fixed-mask ${REGISTRATIONMODELMASK} --moving-mask ${tmpdir}/${n}/bmask_fix.mnc \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
 antsApplyTransforms -d 3 -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
