@@ -156,10 +156,35 @@ function make_qc() {
     fi
 }
 
+isotropize() {
+  # Need smoothing for downsampling to avoid aliasing
+  # Ideas stolen from https://discourse.itk.org/t/resampling-to-isotropic-signal-processing-theory/1403
+  inputres=$(python -c "print('\n'.join([str(abs(x)) for x in [float(x) for x in \"$(PrintHeader ${1} 1)\".split(\"x\")]]))")
+  blurs=""
+
+  for dim in ${inputres}; do
+      if [[ $(python -c "print(${dim}>(${isostep}-1e-6))") == True ]]; then
+         #Special casing for zero/negative blurs
+          blurs+=1e-12x
+      else
+          blurs+=$(python -c "import math; print(math.sqrt((${isostep}**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
+      fi
+  done
+
+  mincmath -mult ${tmpdir}/vessels.mnc ${1} ${tmpdir}/${n}/presmooth_novessels.mnc
+
+  SmoothImage 3 ${tmpdir}/${n}/presmooth_novessels.mnc "${blurs%?}" ${tmpdir}/${n}/smoothed.mnc 1 0
+  ResampleImage 3 ${tmpdir}/${n}/smoothed.mnc ${tmpdir}/${n}/isotropized.mnc ${isostep}x${isostep}x${isostep} 0 4
+
+  mincmath -quiet -clamp -const2 0 65535 ${tmpdir}/${n}/isotropized.mnc ${tmpdir}/${n}/downsample.mnc
+
+}
+
 #Iterative multi-scale N3 implementation
 do_N3() {
-    ResampleImage 3 ${n3input} ${tmpdir}/${n}/downsample.mnc ${isostep}x${isostep}x${isostep} 0 1
-    #mincmath -clobber -clamp -const2 0 65535 ${tmpdir}/${n}/isotropized.mnc ${tmpdir}/${n}/downsample.mnc
+    # This code does cycles of N3 at a given scale, and then halves the scale and repeats until the limit is reached
+    # Input images are downsampled before N3
+    isotropize ${n3input}
     n3input=${tmpdir}/${n}/downsample.mnc
     minccalc -unsigned -byte -expression 'A[0]>1?1:0' ${tmpdir}/${n}/downsample.mnc ${tmpdir}/${n}/nonzero.mnc
     antsApplyTransforms -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/${n}/tmpweight.mnc -r ${n3input} -n GenericLabel --verbose
@@ -195,8 +220,8 @@ do_N3() {
 }
 
 do_N3_reordered() {
-    ResampleImage 3 ${n3input} ${tmpdir}/${n}/isotropized.mnc ${isostep}x${isostep}x${isostep} 0 4
-    mincmath -clobber -clamp -const2 0 65535 ${tmpdir}/${n}/isotropized.mnc ${tmpdir}/${n}/downsample.mnc
+    # This code does repeated cycles of the full step-down of levels of N3
+    isotropize ${n3input}
     n3input=${tmpdir}/${n}/downsample.mnc
     minccalc -unsigned -byte -expression 'A[0]>1?1:0' ${tmpdir}/${n}/downsample.mnc ${tmpdir}/${n}/nonzero.mnc
     antsApplyTransforms -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/${n}/tmpweight.mnc -r ${n3input} -n GenericLabel --verbose
