@@ -200,12 +200,15 @@ do_N3() {
                 -stop ${stop} -distance ${distance} -iterations ${iters} -fwhm ${fwhm} -shrink 1 -lambda ${lambda} \
                 -mask ${tmpdir}/${n}/tmpweight.mnc ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}.mnc
 
-            nu_evaluate -verbose -clobber -mapping ${tmpdir}/${n}/corrected_${distance}_${i}.imp \
-              -mask ${tmpdir}/${n}/tmpbg.mnc \
-              ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}.mnc
+            evaluate_field -unsigned -double -clobber -like ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}.imp ${tmpdir}/${n}/corrected_${distance}_${i}_field.mnc
 
-            mincmath -clobber -clamp -const2 0 65535 ${tmpdir}/${n}/corrected_${distance}_${i}.mnc ${tmpdir}/${n}/clamp.mnc
-            mv -f ${tmpdir}/${n}/clamp.mnc ${tmpdir}/${n}/corrected_${distance}_${i}.mnc
+            biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/tmpweight.mnc -mask_binvalue 1 ${tmpdir}/${n}/corrected_${distance}_${i}_field.mnc)
+            origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/tmpweight.mnc -mask_binvalue 1 ${n3input})
+
+            minccalc -clobber -unsigned -short \
+              -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" \
+              ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}_field.mnc ${tmpdir}/${n}/corrected_${distance}_${i}.mnc -clobber
+
             n3input=${tmpdir}/${n}/corrected_${distance}_${i}.mnc
 
             ((++i))
@@ -215,7 +218,7 @@ do_N3() {
     done
 
   for file in ${tmpdir}/${n}/*imp; do
-     echo evaluate_field -double -clobber -like ${tmpdir}/originput.mnc ${file} ${tmpdir}/${n}/$(basename $file .imp)_field.mnc
+     echo evaluate_field -unsigned -double -clobber -like ${tmpdir}/originput.mnc ${file} ${tmpdir}/${n}/$(basename $file .imp)_field.mnc
   done | parallel
 }
 
@@ -385,7 +388,13 @@ N4BiasFieldCorrection -d 3 --verbose  -i ${n3input} \
   --histogram-sharpening [ 0.1,0.01,200 ] \
   -c [ 300x300x300x300x300,1e-5 ] \
   -x ${tmpdir}/bgmask.mnc -w ${tmpdir}/${n}/weight.mnc \
-  -o ${tmpdir}/${n}/correct.mnc
+  -o [ ${tmpdir}/${n}/correct.mnc,${tmpdir}/${n}/bias.mnc ]
+
+biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/bias.mnc)
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/correct.mnc -clobber
+
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -437,9 +446,10 @@ mincmath -clobber -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.
 correct_field ${tmpdir}/${n}/field_combined.mnc ${tmpdir}/${n}/fgmask.mnc ${tmpdir}/${n}/field_combined_correct.mnc
 mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_correct.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-mincmath -clobber -copy_header -zero -div ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc
-mincmath -clobber -clamp -const2 0 65535 ${tmpdir}/${n}/correct.mnc ${tmpdir}/${n}/clamp.mnc
-mv -f ${tmpdir}/${n}/clamp.mnc ${tmpdir}/${n}/correct.mnc
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
+
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -488,17 +498,18 @@ do_N3
 iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/${n}/mnimask.mnc 2 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/correct_mask.mnc FillHoles ${tmpdir}/${n}/correct_mask.mnc
 
-mincmath -clobber -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
+mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
 
 correct_field ${tmpdir}/${n}/field_combined.mnc ${tmpdir}/${n}/correct_mask.mnc ${tmpdir}/${n}/field_combined_correct.mnc
 mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_correct.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-mincmath -clobber -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
+mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
 mv -f ${tmpdir}/${n}/field_combined_correct_clamp2.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-mincmath -clobber -copy_header -zero -div ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc
-mincmath -clobber -clamp -const2 0 65535 ${tmpdir}/${n}/correct.mnc ${tmpdir}/${n}/clamp.mnc
-mv -f ${tmpdir}/${n}/clamp.mnc ${tmpdir}/${n}/correct.mnc
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
+
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -597,19 +608,20 @@ do_N3
 iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 2 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/correct_mask.mnc FillHoles ${tmpdir}/${n}/correct_mask.mnc
 
-mincmath -clobber -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
+mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
 
 correct_field ${tmpdir}/${n}/field_combined.mnc ${tmpdir}/${n}/correct_mask.mnc ${tmpdir}/${n}/field_combined_correct.mnc
 mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_correct.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-mincmath -clobber -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
+mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
 mv -f ${tmpdir}/${n}/field_combined_correct_clamp2.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-mincmath -clobber -copy_header -zero -div ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc
-mincmath -clobber -clamp -const2 0 65535 ${tmpdir}/${n}/correct.mnc ${tmpdir}/${n}/clamp.mnc
-mv -f ${tmpdir}/${n}/clamp.mnc ${tmpdir}/${n}/correct.mnc
 
-ImageMath 3 ${tmpdir}/corrected.mnc RescaleImage ${tmpdir}/${n}/correct.mnc 0 65535
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
+
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
+cp -f ${tmpdir}/${n}/correct.mnc ${tmpdir}/corrected.mnc
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
 
