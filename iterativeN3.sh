@@ -190,7 +190,6 @@ do_N3() {
     antsApplyTransforms -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/${n}/tmpweight.mnc -r ${n3input} -n GenericLabel --verbose
     antsApplyTransforms -d 3 -i ${tmpdir}/bgmask.mnc -o ${tmpdir}/${n}/tmpbg.mnc -r ${n3input} -n GenericLabel --verbose
     ImageMath 3 ${tmpdir}/${n}/tmpweight.mnc m ${tmpdir}/${n}/tmpweight.mnc ${tmpdir}/${n}/nonzero.mnc
-    #ImageMath 3 ${tmpdir}/${n}/tmpweight.mnc GetLargestComponent ${tmpdir}/${n}/tmpweight.mnc
     distance=${origdistance}
     j=0
     while (( j < levels )); do
@@ -377,7 +376,6 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 make_outlier_map ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/fgmask.mnc ${tmpdir}/${n}/hotmask.mnc
-#ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 
 n3input=${tmpdir}/originput.mnc
 
@@ -438,10 +436,18 @@ ThresholdImage 3 ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/weight.mnc Otsu 4 ${t
 ThresholdImage 3 ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc 3 Inf 1 0
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
-n3input=${tmpdir}/originput.mnc
+minc_anlm --clobber --mt $(nproc) ${tmpdir}/originput.mnc ${tmpdir}/originput_denoise.mnc
+
+#For the all-data N3, don't fit too tightly
+origlevels=${levels}
+levels=$(calc "${levels} - 1")
+
+n3input=${tmpdir}/originput_denoise.mnc
 do_N3
 
-mincmath -clobber -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
+levels=${origlevels}
+
+mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
 
 correct_field ${tmpdir}/${n}/field_combined.mnc ${tmpdir}/${n}/fgmask.mnc ${tmpdir}/${n}/field_combined_correct.mnc
 mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_correct.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
@@ -492,7 +498,7 @@ make_outlier_map ${tmpdir}/${n}/denoise.mnc ${tmpdir}/fgmask.mnc ${tmpdir}/${n}/
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/vessels.mnc
 
-n3input=${tmpdir}/$(( n - 1 ))/correct.mnc
+n3input=${tmpdir}/${n}/denoise.mnc
 do_N3
 
 iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/${n}/mnimask.mnc 2 1 ball 1
@@ -601,8 +607,10 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/vess
 make_outlier_map ${tmpdir}/${n}/denoise.mnc ${tmpdir}/fgmask.mnc ${tmpdir}/${n}/hotmask.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 
+#Last round we do a higher-resolution N3
 isostep=2.0
-n3input=${tmpdir}/$(( n - 1 ))/correct.mnc
+
+n3input=${tmpdir}/${n}/denoise.mnc
 do_N3
 
 iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 2 1 ball 1
