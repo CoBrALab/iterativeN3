@@ -298,8 +298,7 @@ make_outlier_map() {
 }
 
 
-tmpdir=$(mktemp -p . -d $(basename $1)XXXXX)
-
+tmpdir=$(mktemp -d)
 
 function finish {
   if [[ ! -s ${tmpdir}/keep ]]; then
@@ -323,9 +322,9 @@ output=$2
 #Defaults
 origdistance=400
 distance=${origdistance}
-levels=5
+levels=4
 cycles=3
-iters=100
+iters=25
 lambda=2e-6
 shrink=4.0
 fwhm=0.1
