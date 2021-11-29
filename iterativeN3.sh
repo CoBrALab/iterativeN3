@@ -7,6 +7,7 @@ BEASTLIBRARY_DIR="${QUARANTINE_PATH}/resources/BEaST_libraries/combined"
 RESAMPLEMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
 RESAMPLEMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
 
+# ADNI Model
 # REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/adni_model_3d_v2/model_t1w.mnc"
 # REGISTRATIONMODELMASK="${QUARANTINE_PATH}/resources/adni_model_3d_v2/model_t1w_mask.mnc"
 # WMPRIOR="${QUARANTINE_PATH}/resources/adni_model_3d_v2/wm.mnc"
@@ -21,20 +22,12 @@ CSFPRIOR="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm15
 DEEPGMPRIOR=""
 
 # 4 classes
-#REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
-#REGISTRATIONMODELMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
-#WMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior3.mnc"
-#GMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior2.mnc"
-#CSFPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior1.mnc"
-#DEEPGMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior4.mnc"
-
-# 4 classes
 # REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
 # REGISTRATIONMODELMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
-# WMPRIOR="/gpfs/fs0/scratch/m/mchakrav/gdevenyi/MNI-reclassify/recombine/final_prior3.mnc"
-# GMPRIOR="/gpfs/fs0/scratch/m/mchakrav/gdevenyi/MNI-reclassify/recombine/final_prior2.mnc"
-# CSFPRIOR="/gpfs/fs0/scratch/m/mchakrav/gdevenyi/MNI-reclassify/recombine/final_prior1.mnc"
-# DEEPGMPRIOR="/gpfs/fs0/scratch/m/mchakrav/gdevenyi/MNI-reclassify/recombine/final_prior4.mnc"
+# WMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior3.mnc"
+# GMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior2.mnc"
+# CSFPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior1.mnc"
+# DEEPGMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior4.mnc"
 
 #Calculator for maths
 calc () { awk "BEGIN{ print $* }" ;}
@@ -188,7 +181,6 @@ do_N3() {
     n3input=${tmpdir}/${n}/downsample.mnc
     minccalc -unsigned -byte -expression 'A[0]>1?1:0' ${tmpdir}/${n}/downsample.mnc ${tmpdir}/${n}/nonzero.mnc
     antsApplyTransforms -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/${n}/tmpweight.mnc -r ${n3input} -n GenericLabel --verbose
-    antsApplyTransforms -d 3 -i ${tmpdir}/bgmask.mnc -o ${tmpdir}/${n}/tmpbg.mnc -r ${n3input} -n GenericLabel --verbose
     ImageMath 3 ${tmpdir}/${n}/tmpweight.mnc m ${tmpdir}/${n}/tmpweight.mnc ${tmpdir}/${n}/nonzero.mnc
     distance=${origdistance}
     j=0
@@ -221,65 +213,6 @@ do_N3() {
   done | parallel
 }
 
-do_N3_reordered() {
-    # This code does repeated cycles of the full step-down of levels of N3
-    isotropize ${n3input}
-    n3input=${tmpdir}/${n}/downsample.mnc
-    minccalc -unsigned -byte -expression 'A[0]>1?1:0' ${tmpdir}/${n}/downsample.mnc ${tmpdir}/${n}/nonzero.mnc
-    antsApplyTransforms -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/${n}/tmpweight.mnc -r ${n3input} -n GenericLabel --verbose
-    antsApplyTransforms -d 3 -i ${tmpdir}/bgmask.mnc -o ${tmpdir}/${n}/tmpbg.mnc -r ${n3input} -n GenericLabel --verbose
-    ImageMath 3 ${tmpdir}/${n}/tmpweight.mnc m ${tmpdir}/${n}/tmpweight.mnc ${tmpdir}/${n}/nonzero.mnc
-    ImageMath 3 ${tmpdir}/${n}/tmpweight.mnc GetLargestComponent ${tmpdir}/${n}/tmpweight.mnc
-
-    i=0
-    while (( i < cycles )); do
-        distance=${origdistance}
-        j=0
-        while (( j < levels )); do
-            nu_correct -clobber -normalize_field \
-                -stop ${stop} -distance ${distance} -iterations ${iters} -fwhm ${fwhm} -shrink 1 -lambda ${lambda} \
-                -mask ${tmpdir}/${n}/tmpweight.mnc ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}.mnc
-
-            nu_evaluate -verbose -clobber -mapping ${tmpdir}/${n}/corrected_${distance}_${i}.imp \
-              -mask ${tmpdir}/${n}/tmpbg.mnc \
-              ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}.mnc
-
-            mincmath -clobber -clamp -const2 0 65535 ${tmpdir}/${n}/corrected_${distance}_${i}.mnc ${tmpdir}/${n}/clamp.mnc
-            mv -f ${tmpdir}/${n}/clamp.mnc ${tmpdir}/${n}/corrected_${distance}_${i}.mnc
-            n3input=${tmpdir}/${n}/corrected_${distance}_${i}.mnc
-
-            ((++j))
-            distance=$(calc "${distance} / 2")
-        done
-
-        ((++i))
-    done
-
-  for file in ${tmpdir}/${n}/*imp; do
-     echo evaluate_field -double -clobber -like ${tmpdir}/originput.mnc ${file} ${tmpdir}/${n}/$(basename $file .imp)_field.mnc
-  done | parallel
-}
-
-do_N4() {
-
-  i=0
-  while (( i < cycles )); do
-    N4BiasFieldCorrection -d 3 --verbose  -i ${n3input} \
-    -b [ ${distance} ] -s $(calc "int(${shrink} / (4.0/${isostep}))") \
-    --histogram-sharpening [ 0.1,0.01,200 ] \
-    -c [ $(printf "${iters}")$(printf "x${iters}%.0s" $(eval echo {1..$(calc "${levels} - 1")})),1e-5 ] \
-    -x ${tmpdir}/bgmask.mnc -w ${tmpdir}/${n}/weight.mnc \
-    -o [ ${tmpdir}/${n}/corrected_${i}.mnc, ${tmpdir}/${n}/corrected_${i}_field.mnc ]
-    n3input=${tmpdir}/${n}/corrected_${i}.mnc
-    ((++i))
-  done
-
-  for file in ${tmpdir}/${n}/*field.mnc; do
-    ImageMath 3 ${file} / ${file} $(mincstats -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 -mean ${file} )
-  done
-
-}
-
 make_outlier_map() {
   outlier_input=$1
   mask_input=$2
@@ -297,13 +230,12 @@ make_outlier_map() {
     ${outlier_input} ${outlier_output}
 }
 
-
 tmpdir=$(mktemp -d)
 
 function finish {
   if [[ ! -s ${tmpdir}/keep ]]; then
-    #rm -rf "${tmpdir}"
-    echo done
+    rm -rf "${tmpdir}"
+    echo "done"
   fi
 }
 trap finish EXIT
@@ -572,7 +504,7 @@ antsApplyTransforms -d 3 -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.x
     -n Linear --verbose \
     -r ${tmpdir}/originput.mnc -o ${tmpdir}/${n}/prior1.mnc
 
-if [[ ! -z ${DEEPGMPRIOR} ]]; then
+if [[ -n ${DEEPGMPRIOR} ]]; then
   antsApplyTransforms -d 3 -i ${DEEPGMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
       -n Linear --verbose \
       -r ${tmpdir}/originput.mnc -o ${tmpdir}/${n}/prior4.mnc
@@ -583,7 +515,7 @@ iMath 3 ${tmpdir}/${n}/bmask_D.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/bmask_D.mnc ${tmpdir}/vessels.mnc
 ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/$(( n - 1 ))/hotmask.mnc
 
-if [[ ! -z ${DEEPGMPRIOR} ]]; then
+if [[ -n ${DEEPGMPRIOR} ]]; then
   Atropos --verbose -d 3 -a ${tmpdir}/${n}/denoise.mnc -x ${tmpdir}/${n}/atropos_mask.mnc  -c [ 25, 0.005 ] \
       -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 0 ]  -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
       -l [ 0.69314718055994530942,1 ] \
@@ -632,7 +564,7 @@ cp -f ${tmpdir}/${n}/correct.mnc ${tmpdir}/corrected.mnc
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
 
-if [[ ! -z ${DEEPGMPRIOR} ]]; then
+if [[ -n ${DEEPGMPRIOR} ]]; then
   Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
       -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
       -l [ 0.69314718055994530942,1 ] \
