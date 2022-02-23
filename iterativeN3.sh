@@ -316,7 +316,7 @@ do_N3() {
     done
 
   for file in ${tmpdir}/${n}/*imp; do
-     echo evaluate_field -unsigned -double -clobber -like ${tmpdir}/originput.mnc ${file} ${tmpdir}/${n}/$(basename $file .imp)_field.mnc
+     echo evaluate_field -unsigned -double -clobber -like ${tmpdir}/input.mnc ${file} ${tmpdir}/${n}/$(basename $file .imp)_field.mnc
   done | parallel
 }
 
@@ -376,29 +376,27 @@ dy=$(mincinfo -attvalue yspace:step ${input})
 dz=$(mincinfo -attvalue zspace:step ${input})
 shrink=$(python -c "print(${shrink} / ( ( abs(${dx}) + abs(${dy}) + abs(${dz}) ) / 3.0 ))")
 
-# Forceably convert to MINC2, and clamp range to avoid negative numbers, rescale to 0-65535
-mincconvert -2 ${input} ${tmpdir}/originput.mnc
-#Rescale initial data into entirely positive range (fix for completely negative data)
-ImageMath 3 ${tmpdir}/originput.mnc RescaleImage ${tmpdir}/originput.mnc 0 65535
-cp -f ${tmpdir}/originput.mnc ${tmpdir}/origqcref.mnc
+mincnorm -noclamp -cutoff 0.001 ${input} ${tmpdir}/originput.mnc
 
-mincnorm -short -clamp -out_floor 0 -out_ceil 65535 ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
-mv -f ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.mnc
+# Clamp range to avoid negative numbers, rescale to 0-65535
+mincnorm -noclamp -short -out_floor 0 -out_ceil 65535 ${input} ${tmpdir}/input.mnc
+cp -f ${tmpdir}/input.mnc ${tmpdir}/origqcref.mnc
 
 # Pad image for processing
-ImageMath 3 ${tmpdir}/originput.mnc PadImage ${tmpdir}/originput.mnc 20
+volpad -noauto -distance 20 ${tmpdir}/input.mnc ${tmpdir}/pad.mnc
+mv -f ${tmpdir}/pad.mnc ${tmpdir}/input.mnc
 
 n=0
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm --clobber --mt $(nproc) ${tmpdir}/originput.mnc ${tmpdir}/${n}/denoise.mnc
+minc_anlm --clobber --mt $(nproc) ${tmpdir}/input.mnc ${tmpdir}/${n}/denoise.mnc
 
 #Masking of blood vessels
 itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/${n}/denoise.mnc ${tmpdir}/vessels.mnc
 ThresholdImage 3 ${tmpdir}/vessels.mnc ${tmpdir}/vessels.mnc 35 Inf 0 1
 
 #Round 1, Otsu mask of foreground
-ThresholdImage 3 ${tmpdir}/originput.mnc ${tmpdir}/${n}/bgmask.mnc 1 Inf 1 0
+ThresholdImage 3 ${tmpdir}/input.mnc ${tmpdir}/${n}/bgmask.mnc 1 Inf 1 0
 cp -f ${tmpdir}/${n}/bgmask.mnc ${tmpdir}/bgmask.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/bgmask.mnc ${tmpdir}/vessels.mnc
 ThresholdImage 3 ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/weight.mnc Otsu 4 ${tmpdir}/${n}/weight.mnc
@@ -409,14 +407,13 @@ ImageMath 3 ${tmpdir}/${n}/fgmask.mnc FillHoles ${tmpdir}/${n}/fgmask.mnc 2
 ImageMath 3 ${tmpdir}/${n}/fgmask.mnc GetLargestComponent ${tmpdir}/${n}/fgmask.mnc
 
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/vessels.mnc
-minccalc -unsigned -byte -expression 'A[0]>1?1:0' ${tmpdir}/originput.mnc ${tmpdir}/${n}/nonzero.mnc
+minccalc -unsigned -byte -expression 'A[0]>1?1:0' ${tmpdir}/input.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 make_outlier_map ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/fgmask.mnc ${tmpdir}/${n}/hotmask.mnc
 
-n3input=${tmpdir}/originput.mnc
-
+n3input=${tmpdir}/input.mnc
 
 #Initial correction not used for the final outputs but rather just to enable good foreground-background masking
 N4BiasFieldCorrection -d 3 --verbose  -i ${n3input} \
@@ -427,19 +424,19 @@ N4BiasFieldCorrection -d 3 --verbose  -i ${n3input} \
   -o [ ${tmpdir}/${n}/correct.mnc,${tmpdir}/${n}/bias.mnc ]
 
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/bias.mnc)
-origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/input.mnc)
 
-minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/correct.mnc -clobber
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
 #Redo normalization
-antsApplyTransforms -d 3 -i ${tmpdir}/$(( n - 1 ))/fgmask.mnc -r ${tmpdir}/origqcref.mnc -o ${tmpdir}/fgmask_orig.mnc -n GenericLabel
-mincnorm -short -clamp -mask ${tmpdir}/fgmask_orig.mnc -out_floor 0 -out_ceil 65535 ${tmpdir}/origqcref.mnc ${tmpdir}/originput.clamp.mnc
-mv -f ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.mnc
-ImageMath 3 ${tmpdir}/originput.mnc PadImage ${tmpdir}/originput.mnc 20
+antsApplyTransforms -d 3 -i ${tmpdir}/$(( n - 1 ))/fgmask.mnc -r ${input} -o ${tmpdir}/fgmask_orig.mnc -n GenericLabel
+mincnorm -clobber -short -noclamp -mask ${tmpdir}/fgmask_orig.mnc -out_floor 0 -out_ceil 65535 ${input} ${tmpdir}/input.mnc
+volpad -noauto -distance 20 ${tmpdir}/input.mnc ${tmpdir}/pad.mnc
+mv -f ${tmpdir}/pad.mnc ${tmpdir}/input.mnc
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
@@ -474,13 +471,13 @@ ThresholdImage 3 ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/weight.mnc Otsu 4 ${t
 ThresholdImage 3 ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc 3 Inf 1 0
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
-minc_anlm --clobber --mt $(nproc) ${tmpdir}/originput.mnc ${tmpdir}/originput_denoise.mnc
+minc_anlm --clobber --mt $(nproc) ${tmpdir}/input.mnc ${tmpdir}/input_denoise.mnc
 
 #For the all-data N3, don't fit too tightly
 origlevels=${levels}
 levels=$(calc "${levels} - 1")
 
-n3input=${tmpdir}/originput_denoise.mnc
+n3input=${tmpdir}/input_denoise.mnc
 do_N3
 
 levels=${origlevels}
@@ -490,10 +487,10 @@ mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${
 correct_field ${tmpdir}/${n}/field_combined.mnc ${tmpdir}/${n}/fgmask.mnc ${tmpdir}/${n}/field_combined_correct.mnc
 mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_correct.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/input.mnc)
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
 
-minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -505,13 +502,13 @@ antsRegistration_affine_SyN.sh --verbose --float --convergence 1e-7 \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
 minccalc -unsigned -byte -expression '1' ${RESAMPLEMODEL} ${tmpdir}/model_fov.mnc
-mincresample -nofill -clobber -labels -near -like ${tmpdir}/originput.mnc -transform ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/model_fov.mnc ${tmpdir}/subject_fov.mnc
+mincresample -nofill -clobber -labels -near -like ${tmpdir}/input.mnc -transform ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/model_fov.mnc ${tmpdir}/subject_fov.mnc
 ImageMath 3 ${tmpdir}/fgmask_fov.mnc m ${tmpdir}/$(( n - 1 ))/fgmask.mnc ${tmpdir}/subject_fov.mnc
 cp -f ${tmpdir}/$(( n - 1 ))/fgmask.mnc ${tmpdir}/fgmask.mnc
 
 antsApplyTransforms -d 3 -i ${REGISTRATIONMODELMASK} \
     -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] \
-    -n GenericLabel --verbose -r ${tmpdir}/originput.mnc \
+    -n GenericLabel --verbose -r ${tmpdir}/input.mnc \
     -o ${tmpdir}/${n}/mnimask.mnc
 
 iMath 3 ${tmpdir}/${n}/mnimask.mnc MD ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
@@ -550,10 +547,10 @@ mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_
 mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
 mv -f ${tmpdir}/${n}/field_combined_correct_clamp2.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/input.mnc)
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
 
-minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -581,7 +578,7 @@ volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMP
 mincbeast -verbose -fill -median -same_res -flip -v2 -conf ${BEASTLIBRARY_DIR}/default.1mm.conf ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -n GenericLabel --verbose \
-    -r ${tmpdir}/originput.mnc -o ${tmpdir}/${n}/bmask.mnc
+    -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/bmask.mnc
 
 ImageMath 3 ${tmpdir}/${n}/bmask_temp.mnc m ${tmpdir}/${n}/bmask.mnc ${tmpdir}/vessels.mnc
 ThresholdImage 3 ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/bmask_fix.mnc Otsu 4 ${tmpdir}/${n}/bmask_temp.mnc
@@ -603,18 +600,18 @@ antsRegistration_affine_SyN.sh --clobber --verbose \
 
 antsApplyTransforms -d 3 -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
     -n Linear --verbose \
-    -r ${tmpdir}/originput.mnc -o ${tmpdir}/${n}/prior3.mnc
+    -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior3.mnc
 antsApplyTransforms -d 3 -i ${GMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
     -n Linear --verbose \
-    -r ${tmpdir}/originput.mnc -o ${tmpdir}/${n}/prior2.mnc
+    -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior2.mnc
 antsApplyTransforms -d 3 -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
     -n Linear --verbose \
-    -r ${tmpdir}/originput.mnc -o ${tmpdir}/${n}/prior1.mnc
+    -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior1.mnc
 
 if [[ -n ${DEEPGMPRIOR} ]]; then
   antsApplyTransforms -d 3 -i ${DEEPGMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
       -n Linear --verbose \
-      -r ${tmpdir}/originput.mnc -o ${tmpdir}/${n}/prior4.mnc
+      -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior4.mnc
 fi
 
 iMath 3 ${tmpdir}/${n}/bmask_D.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
@@ -663,38 +660,40 @@ mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_
 mv -f ${tmpdir}/${n}/field_combined_correct_clamp2.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
 
-origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/originput.mnc)
+origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/input.mnc)
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
 
-minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
-cp -f ${tmpdir}/${n}/correct.mnc ${tmpdir}/corrected.mnc
-
-minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
-
-if [[ -n ${DEEPGMPRIOR} ]]; then
-  Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
-      -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
-      -l [ 0.69314718055994530942,1 ] \
-      -i PriorProbabilityImages[ 4,${tmpdir}/${n}/posterior%d.mnc,0.25 ] -o ${tmpdir}/${n}/classify2.mnc \
-      --winsorize-outliers BoxPlot
-else
-  Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
-      -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 \
-      -l [ 0.69314718055994530942,1 ] \
-      -i PriorProbabilityImages[ 3,${tmpdir}/${n}/posterior%d.mnc,0.25 ] -o ${tmpdir}/${n}/classify2.mnc \
-      --winsorize-outliers BoxPlot
-fi
-
-valuelow=$(mincstats -quiet -floor 1 -pctT 0.1 ${tmpdir}/corrected.mnc)
-valuewm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 3 ${tmpdir}/corrected.mnc)
-valuegm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 2 ${tmpdir}/corrected.mnc)
-valuehigh=$(mincstats -quiet -floor 1 -pctT 99.9 ${tmpdir}/corrected.mnc)
-
-mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
-
 if [[ ${_arg_standalone} == "on" ]]; then
+    minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
+    
+    cp -f ${tmpdir}/${n}/correct.mnc ${tmpdir}/corrected.mnc
+
+    minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
+
+    if [[ -n ${DEEPGMPRIOR} ]]; then
+    Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
+        -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
+        -l [ 0.69314718055994530942,1 ] \
+        -i PriorProbabilityImages[ 4,${tmpdir}/${n}/posterior%d.mnc,0.25 ] -o ${tmpdir}/${n}/classify2.mnc \
+        --winsorize-outliers BoxPlot
+    else
+    Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
+        -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 \
+        -l [ 0.69314718055994530942,1 ] \
+        -i PriorProbabilityImages[ 3,${tmpdir}/${n}/posterior%d.mnc,0.25 ] -o ${tmpdir}/${n}/classify2.mnc \
+        --winsorize-outliers BoxPlot
+    fi
+
+    valuelow=$(mincstats -quiet -floor 1 -pctT 0.1 ${tmpdir}/corrected.mnc)
+    valuewm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 3 ${tmpdir}/corrected.mnc)
+    valuegm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 2 ${tmpdir}/corrected.mnc)
+    valuehigh=$(mincstats -quiet -floor 1 -pctT 99.9 ${tmpdir}/corrected.mnc)
+
+    mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
+
     #Re pad final image using model FOV mask
-    ImageMath 3 ${tmpdir}/corrected.mnc PadImage ${tmpdir}/corrected.mnc 50
+    volpad -noauto -distance 50 ${tmpdir}/corrected.mnc ${tmpdir}/corrected_pad.mnc
+    mv -f ${tmpdir}/corrected_pad.mnc ${tmpdir}/corrected.mnc
 
     antsApplyTransforms -d 3 --verbose -i ${tmpdir}/fgmask_fov.mnc -n GenericLabel \
         -o ${tmpdir}/fgmask_fov.mnc \
@@ -704,16 +703,9 @@ if [[ ${_arg_standalone} == "on" ]]; then
     ExtractRegionFromImageByMask 3 ${tmpdir}/corrected.mnc ${tmpdir}/repad.mnc ${tmpdir}/fgmask_fov.mnc 1 $(calc "int(10.0*4.0/${shrink})")
     cp -f ${tmpdir}/repad.mnc ${tmpdir}/corrected.mnc
     mincresample -unsigned -short ${tmpdir}/corrected.mnc ${output}
-else
-    #Retain the original input shape
-    mincresample -like ${tmpdir}/originput.mnc -unsigned -short ${tmpdir}/corrected.mnc ${output}
-fi
 
-
-
-if [[ ${_arg_standalone} == "on" ]]; then
     minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
-        ${tmpdir}/corrected.mnc $(dirname ${output})/$(basename ${output} .mnc).rescale.mnc
+    ${tmpdir}/corrected.mnc $(dirname ${output})/$(basename ${output} .mnc).rescale.mnc
 
     mincresample -like ${output} -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${output})/$(basename ${output} .mnc).mask.mnc
     mincresample -like ${output} -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${output})/$(basename ${output} .mnc).classify.mnc
@@ -731,6 +723,9 @@ if [[ ${_arg_standalone} == "on" ]]; then
     -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${output})/$(basename ${output} .mnc).lsq6.mask.mnc
     mincresample -transform ${tmpdir}/lsq6.xfm -like $(dirname ${output})/$(basename ${output} .mnc).lsq6.mnc \
     -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${output})/$(basename ${output} .mnc).lsq6.classify.mnc
+else
+    mincresample -fillvalue 1 -like ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc
+    minccalc -expression "A[0]/(A[1]/${biasmean})" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc ${output} -clobber
 fi
 
 # ] <-- needed because of Argbash
