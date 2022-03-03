@@ -537,7 +537,7 @@ n3input=${tmpdir}/${n}/denoise.mnc
 do_N3
 
 iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/${n}/mnimask.mnc 2 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/correct_mask.mnc FillHoles ${tmpdir}/${n}/correct_mask.mnc
+ImageMath 3 ${tmpdir}/${n}/correct_mask.mnc FillHoles ${tmpdir}/${n}/correct_mask.mnc 2
 
 mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
 
@@ -665,7 +665,7 @@ biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue
 
 if [[ ${_arg_standalone} == "on" ]]; then
     minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
-    
+
     cp -f ${tmpdir}/${n}/correct.mnc ${tmpdir}/corrected.mnc
 
     minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
