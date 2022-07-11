@@ -393,9 +393,14 @@ input=${tmpdir}/reshape2.mnc
 
 
 mincnorm -noclamp -cutoff 0.001 ${input} ${tmpdir}/originput.mnc
+mincmath -clamp -const2 0 inf ${tmpdir}/originput.mnc ${tmpdir}/norm.mnc
+mv -f ${tmpdir}/norm.mnc ${tmpdir}/originput.mnc
 
 # Clamp range to avoid negative numbers, rescale to 0-65535
 mincnorm -noclamp -short -out_floor 0 -out_ceil 65535 ${input} ${tmpdir}/input.mnc
+mincmath -clamp -const2 0 inf ${tmpdir}/input.mnc ${tmpdir}/norm.mnc
+mv -f ${tmpdir}/norm.mnc ${tmpdir}/input.mnc
+
 cp -f ${tmpdir}/input.mnc ${tmpdir}/origqcref.mnc
 
 # Pad image for processing
@@ -451,6 +456,9 @@ mkdir -p ${tmpdir}/${n}
 #Redo normalization
 antsApplyTransforms -d 3 -i ${tmpdir}/$(( n - 1 ))/fgmask.mnc -r ${input} -o ${tmpdir}/fgmask_orig.mnc -n GenericLabel
 mincnorm -clobber -short -noclamp -mask ${tmpdir}/fgmask_orig.mnc -out_floor 0 -out_ceil 65535 ${input} ${tmpdir}/input.mnc
+mincmath -clamp -const2 0 inf ${tmpdir}/input.mnc ${tmpdir}/norm.mnc
+mv -f ${tmpdir}/norm.mnc ${tmpdir}/input.mnc
+
 volpad -noauto -distance 20 ${tmpdir}/input.mnc ${tmpdir}/pad.mnc
 mv -f ${tmpdir}/pad.mnc ${tmpdir}/input.mnc
 
