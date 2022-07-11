@@ -376,6 +376,22 @@ dy=$(mincinfo -attvalue yspace:step ${input})
 dz=$(mincinfo -attvalue zspace:step ${input})
 shrink=$(python -c "print(${shrink} / ( ( abs(${dx}) + abs(${dy}) + abs(${dz}) ) / 3.0 ))")
 
+# Change the slicing direction to be the same as what ITK outputs by default
+mincreshape -dimorder zspace,yspace,xspace +direction ${input} ${tmpdir}/reshape1.mnc
+mincreshape -dimorder zspace,yspace,xspace +direction ${tmpdir}/reshape1.mnc ${tmpdir}/reshape2.mnc
+rm -f ${tmpdir}/reshape1.mnc
+
+# Store the direction cosine transform because we're going to zero out the file
+dircos_to_xfm ${tmpdir}/reshape2.mnc ${tmpdir}/transform_to_input.xfm
+
+#Square up direction cosines
+minc_modify_header -dinsert xspace:direction_cosines=1,0,0 ${tmpdir}/reshape2.mnc
+minc_modify_header -dinsert yspace:direction_cosines=0,1,0 ${tmpdir}/reshape2.mnc
+minc_modify_header -dinsert zspace:direction_cosines=0,0,1 ${tmpdir}/reshape2.mnc
+
+input=${tmpdir}/reshape2.mnc
+
+
 mincnorm -noclamp -cutoff 0.001 ${input} ${tmpdir}/originput.mnc
 
 # Clamp range to avoid negative numbers, rescale to 0-65535
@@ -702,10 +718,14 @@ if [[ ${_arg_standalone} == "on" ]]; then
     ImageMath 3 ${tmpdir}/corrected.mnc m ${tmpdir}/corrected.mnc ${tmpdir}/fgmask_fov.mnc
     ExtractRegionFromImageByMask 3 ${tmpdir}/corrected.mnc ${tmpdir}/repad.mnc ${tmpdir}/fgmask_fov.mnc 1 $(calc "int(10.0*4.0/${shrink})")
     cp -f ${tmpdir}/repad.mnc ${tmpdir}/corrected.mnc
-    mincresample -unsigned -short ${tmpdir}/corrected.mnc ${output}
+    mincresample -unsigned -short -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/corrected.mnc ${output} -clobber
 
-    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
-    ${tmpdir}/corrected.mnc $(dirname ${output})/$(basename ${output} .mnc).rescale.mnc
+    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned \
+        -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
+        ${tmpdir}/corrected.mnc ${tmpdir}/rescale.mnc
+
+    mincresample -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
+        $(dirname ${output})/$(basename ${output} .mnc).rescale.mnc -clobber
 
     mincresample -like ${output} -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${output})/$(basename ${output} .mnc).mask.mnc
     mincresample -like ${output} -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${output})/$(basename ${output} .mnc).classify.mnc
@@ -725,7 +745,8 @@ if [[ ${_arg_standalone} == "on" ]]; then
     -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${output})/$(basename ${output} .mnc).lsq6.classify.mnc
 else
     mincresample -fillvalue 1 -like ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc
-    minccalc -expression "A[0]/(A[1]/${biasmean})" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc ${output} -clobber
+    minccalc -expression "A[0]/(A[1]/${biasmean})" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc ${tmpdir}/backtransform.mnc
+    mincresample -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/backtransform.mnc ${output} -clobber
 fi
 
 # ] <-- needed because of Argbash
