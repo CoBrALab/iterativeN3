@@ -1,8 +1,19 @@
 #!/bin/bash
 #
-#
 # ARG_HELP([iterativeN3 imhomogenaeity correction])
 # ARG_OPTIONAL_BOOLEAN([standalone],[],[Save intermediate outputs during processing])
+# ARG_OPTIONAL_SINGLE([distance],[],[Initial distance for correction],[400])
+# ARG_OPTIONAL_SINGLE([levels],[],[Levels of correction with distance halving],[4])
+# ARG_OPTIONAL_SINGLE([cycles],[],[Cycles of correction at each level],[3])
+# ARG_OPTIONAL_SINGLE([iters],[],[Iterations of correction for each cycle],[25])
+# ARG_OPTIONAL_SINGLE([lambda],[],[Spline regularization value],[2e-6])
+# ARG_OPTIONAL_SINGLE([fwhm],[],[Intensity histogram smoothing fwhm],[0.1])
+# ARG_OPTIONAL_SINGLE([stop],[],[Stopping criterion for N3],[1e-5])
+# ARG_OPTIONAL_SINGLE([isostep],[],[Isotropic resampling resolution in mm for N3],[4])
+# ARG_OPTIONAL_SINGLE([prior-config],[],[Config file to use for models and priors],[mni_icbm152_nlin_sym_09c.cfg])
+# ARG_OPTIONAL_BOOLEAN([clobber],[c],[Overwrite files that already exist])
+# ARG_OPTIONAL_BOOLEAN([verbose],[v],[Run commands verbosely],[on])
+# ARG_OPTIONAL_BOOLEAN([debug],[d],[Show all internal comands and logic for debug],[])
 # ARG_POSITIONAL_SINGLE([input],[Input MINC file])
 # ARG_POSITIONAL_SINGLE([output],[Output MINC File])
 # ARGBASH_GO()
@@ -23,7 +34,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='h'
+	local first_option all_short_options='hcvd'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -32,16 +43,40 @@ begins_with_short_option()
 _positionals=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_standalone="off"
+_arg_distance="400"
+_arg_levels="4"
+_arg_cycles="3"
+_arg_iters="25"
+_arg_lambda="2e-6"
+_arg_fwhm="0.1"
+_arg_stop="1e-5"
+_arg_isostep="4"
+_arg_prior_config="mni_icbm152_nlin_sym_09c.cfg"
+_arg_clobber="off"
+_arg_verbose="on"
+_arg_debug="off"
 
 
 print_help()
 {
 	printf '%s\n' "iterativeN3 imhomogenaeity correction"
-	printf 'Usage: %s [-h|--help] [--(no-)standalone] <input> <output>\n' "$0"
+	printf 'Usage: %s [-h|--help] [--(no-)standalone] [--distance <arg>] [--levels <arg>] [--cycles <arg>] [--iters <arg>] [--lambda <arg>] [--fwhm <arg>] [--stop <arg>] [--isostep <arg>] [--prior-config <arg>] [-c|--(no-)clobber] [-v|--(no-)verbose] [-d|--(no-)debug] <input> <output>\n' "$0"
 	printf '\t%s\n' "<input>: Input MINC file"
 	printf '\t%s\n' "<output>: Output MINC File"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\t%s\n' "--standalone, --no-standalone: Save intermediate outputs during processing (off by default)"
+	printf '\t%s\n' "--distance: Initial distance for correction (default: '400')"
+	printf '\t%s\n' "--levels: Levels of correction with distance halving (default: '4')"
+	printf '\t%s\n' "--cycles: Cycles of correction at each level (default: '3')"
+	printf '\t%s\n' "--iters: Iterations of correction for each cycle (default: '25')"
+	printf '\t%s\n' "--lambda: Spline regularization value (default: '2e-6')"
+	printf '\t%s\n' "--fwhm: Intensity histogram smoothing fwhm (default: '0.1')"
+	printf '\t%s\n' "--stop: Stopping criterion for N3 (default: '1e-5')"
+	printf '\t%s\n' "--isostep: Isotropic resampling resolution in mm for N3 (default: '4')"
+	printf '\t%s\n' "--prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')"
+	printf '\t%s\n' "-c, --clobber, --no-clobber: Overwrite files that already exist (off by default)"
+	printf '\t%s\n' "-v, --verbose, --no-verbose: Run commands verbosely (on by default)"
+	printf '\t%s\n' "-d, --debug, --no-debug: Show all internal comands and logic for debug (off by default)"
 }
 
 
@@ -63,6 +98,114 @@ parse_commandline()
 			--no-standalone|--standalone)
 				_arg_standalone="on"
 				test "${1:0:5}" = "--no-" && _arg_standalone="off"
+				;;
+			--distance)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_distance="$2"
+				shift
+				;;
+			--distance=*)
+				_arg_distance="${_key##--distance=}"
+				;;
+			--levels)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_levels="$2"
+				shift
+				;;
+			--levels=*)
+				_arg_levels="${_key##--levels=}"
+				;;
+			--cycles)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_cycles="$2"
+				shift
+				;;
+			--cycles=*)
+				_arg_cycles="${_key##--cycles=}"
+				;;
+			--iters)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_iters="$2"
+				shift
+				;;
+			--iters=*)
+				_arg_iters="${_key##--iters=}"
+				;;
+			--lambda)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_lambda="$2"
+				shift
+				;;
+			--lambda=*)
+				_arg_lambda="${_key##--lambda=}"
+				;;
+			--fwhm)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_fwhm="$2"
+				shift
+				;;
+			--fwhm=*)
+				_arg_fwhm="${_key##--fwhm=}"
+				;;
+			--stop)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_stop="$2"
+				shift
+				;;
+			--stop=*)
+				_arg_stop="${_key##--stop=}"
+				;;
+			--isostep)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_isostep="$2"
+				shift
+				;;
+			--isostep=*)
+				_arg_isostep="${_key##--isostep=}"
+				;;
+			--prior-config)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_prior_config="$2"
+				shift
+				;;
+			--prior-config=*)
+				_arg_prior_config="${_key##--prior-config=}"
+				;;
+			-c|--no-clobber|--clobber)
+				_arg_clobber="on"
+				test "${1:0:5}" = "--no-" && _arg_clobber="off"
+				;;
+			-c*)
+				_arg_clobber="on"
+				_next="${_key##-c}"
+				if test -n "$_next" -a "$_next" != "$_key"
+				then
+					{ begins_with_short_option "$_next" && shift && set -- "-c" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
+				fi
+				;;
+			-v|--no-verbose|--verbose)
+				_arg_verbose="on"
+				test "${1:0:5}" = "--no-" && _arg_verbose="off"
+				;;
+			-v*)
+				_arg_verbose="on"
+				_next="${_key##-v}"
+				if test -n "$_next" -a "$_next" != "$_key"
+				then
+					{ begins_with_short_option "$_next" && shift && set -- "-v" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
+				fi
+				;;
+			-d|--no-debug|--debug)
+				_arg_debug="on"
+				test "${1:0:5}" = "--no-" && _arg_debug="off"
+				;;
+			-d*)
+				_arg_debug="on"
+				_next="${_key##-d}"
+				if test -n "$_next" -a "$_next" != "$_key"
+				then
+					{ begins_with_short_option "$_next" && shift && set -- "-d" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
+				fi
 				;;
 			*)
 				_last_positional="$1"
@@ -106,35 +249,124 @@ assign_positional_args 1 "${_positionals[@]}"
 ### END OF CODE GENERATED BY Argbash (sortof) ### ])
 # [ <-- needed because of Argbash
 
-
 set -euo pipefail
-set -x
+
+### BASH HELPER FUNCTIONS ###
+# Stolen from https://github.com/kvz/bash3boilerplate
+
+# Set magic variables for current file, directory, os, etc.
+__dir="$(cd "$(dirname "${BASH_SOURCE[${__b3bp_tmp_source_idx:-0}]}")" && pwd)"
+__file="${__dir}/$(basename "${BASH_SOURCE[${__b3bp_tmp_source_idx:-0}]}")"
+__base="$(basename "${__file}" .sh)"
+# shellcheck disable=SC2034,SC2015
+__invocation="$(printf %q "${__file}")$( (($#)) && printf ' %q' "$@" || true)"
+
+if [[ ${_arg_debug} == "on" ]]; then
+  LOG_LEVEL=7
+  set -x
+else
+  LOG_LEVEL=6
+fi
+
+function __b3bp_log() {
+  local log_level="${1}"
+  shift
+
+  # shellcheck disable=SC2034
+  local color_debug="\\x1b[35m" #]
+  # shellcheck disable=SC2034
+  local color_info="\\x1b[32m" #]
+  # shellcheck disable=SC2034
+  local color_notice="\\x1b[34m" #]
+  # shellcheck disable=SC2034
+  local color_warning="\\x1b[33m" #]
+  # shellcheck disable=SC2034
+  local color_error="\\x1b[31m" #]
+  # shellcheck disable=SC2034
+  local color_critical="\\x1b[1;31m" #]
+  # shellcheck disable=SC2034
+  local color_alert="\\x1b[1;37;41m" #]
+  # shellcheck disable=SC2034
+  local color_failure="\\x1b[1;4;5;37;41m" #]
+
+  local colorvar="color_${log_level}"
+
+  local color="${!colorvar:-${color_error}}"
+  local color_reset="\\x1b[0m" #]
+
+  if [[ "${NO_COLOR:-}" = "true" ]] || { [[ "${TERM:-}" != "xterm"* ]] && [[ "${TERM:-}" != "screen"* ]]; } || [[ ! -t 2 ]]; then
+    if [[ "${NO_COLOR:-}" != "false" ]]; then
+      # Don't use colors on pipes or non-recognized terminals
+      color=""
+      color_reset=""
+    fi
+  fi
+
+  # all remaining arguments are to be printed
+  local log_line=""
+
+  while IFS=$'\n' read -r log_line; do
+    echo -e "$(date -u +"%Y-%m-%d %H:%M:%S UTC") ${color}$(printf "[%9s]" "${log_level}")${color_reset} ${log_line}" 1>&2
+  done <<<"${@:-}"
+}
+
+function failure() {
+  __b3bp_log failure "${@}"
+  exit 1
+}
+function alert() {
+  [[ "${LOG_LEVEL:-0}" -ge 1 ]] && __b3bp_log alert "${@}"
+  true
+}
+function critical() {
+  [[ "${LOG_LEVEL:-0}" -ge 2 ]] && __b3bp_log critical "${@}"
+  true
+}
+function error() {
+  [[ "${LOG_LEVEL:-0}" -ge 3 ]] && __b3bp_log error "${@}"
+  true
+}
+function warning() {
+  [[ "${LOG_LEVEL:-0}" -ge 4 ]] && __b3bp_log warning "${@}"
+  true
+}
+function notice() {
+  [[ "${LOG_LEVEL:-0}" -ge 5 ]] && __b3bp_log notice "${@}"
+  true
+}
+function info() {
+  [[ "${LOG_LEVEL:-0}" -ge 6 ]] && __b3bp_log info "${@}"
+  true
+}
+function debug() {
+  [[ "${LOG_LEVEL:-0}" -ge 7 ]] && __b3bp_log debug "${@}"
+  true
+}
+
+# Add handler for failure to show where things went wrong
+failure_handler() {
+  local lineno=${1}
+  local msg=${2}
+  alert "Failed at ${lineno}: ${msg}"
+}
+trap 'failure_handler ${LINENO} "$BASH_COMMAND"' ERR
+
+function run_smart {
+  # Function runs the command it wraps if the file does not exist
+  if [[ ! -s "$1" ]]; then
+    "$2"
+  fi
+}
+
 
 BEASTLIBRARY_DIR="${QUARANTINE_PATH}/resources/BEaST_libraries/combined"
 RESAMPLEMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
 RESAMPLEMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
 
-# ADNI Model
-# REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/adni_model_3d_v2/model_t1w.mnc"
-# REGISTRATIONMODELMASK="${QUARANTINE_PATH}/resources/adni_model_3d_v2/model_t1w_mask.mnc"
-# WMPRIOR="${QUARANTINE_PATH}/resources/adni_model_3d_v2/wm.mnc"
-# GMPRIOR="${QUARANTINE_PATH}/resources/adni_model_3d_v2/gm.mnc"
-# CSFPRIOR="${QUARANTINE_PATH}/resources/adni_model_3d_v2/csf.mnc"
+# Load configuration
+source ${__dir}/configs/${_arg_prior_config}
 
-REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
-REGISTRATIONMODELMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
-WMPRIOR="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_wm_tal_nlin_sym_09c.mnc"
-GMPRIOR="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_gm_tal_nlin_sym_09c.mnc"
-CSFPRIOR="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_csf_tal_nlin_sym_09c.mnc"
-DEEPGMPRIOR=""
 
-# 4 classes
-# REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
-# REGISTRATIONMODELMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
-# WMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior3.mnc"
-# GMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior2.mnc"
-# CSFPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior1.mnc"
-# DEEPGMPRIOR="/home/gdevenyi/scratch/MNI-reclassify/recombine/final_prior4.mnc"
 
 #Calculator for maths
 calc () { awk "BEGIN{ print $* }" ;}
@@ -148,7 +380,7 @@ function make_qc() {
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/${n}/classify2.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-        -i $(dirname ${output})/$(basename ${output} .mnc).rescale.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+        -i $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/origqcref.mnc -o ${tmpdir}/qc/orig.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/corrected.mnc ${tmpdir}/qc/corrected.clamp.mnc
@@ -246,13 +478,13 @@ function make_qc() {
 
     #Save static QC jpg
     convert -background black -strip -interlace Plane -sampling-factor 4:2:0 -quality "85%" \
-        ${tmpdir}/qc/corrected.mpc $(dirname ${output})/$(basename ${output} .mnc).jpg
+        ${tmpdir}/qc/corrected.mpc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg
 
     #If webp software is available animate a before/after image
     if command -v img2webp; then
         convert -background black ${tmpdir}/qc/corrected.mpc ${tmpdir}/qc/corrected.png
         convert -background black ${tmpdir}/qc/orig.mpc ${tmpdir}/qc/orig.png
-        img2webp -d 750 -lossy -min_size ${tmpdir}/qc/orig.png ${tmpdir}/qc/corrected.png -o $(dirname ${output})/$(basename ${output} .mnc).webp || true
+        img2webp -d 750 -lossy -min_size ${tmpdir}/qc/orig.png ${tmpdir}/qc/corrected.png -o $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp || true
     fi
 }
 
@@ -263,18 +495,18 @@ isotropize() {
   blurs=""
 
   for dim in ${inputres}; do
-      if [[ $(python -c "print(${dim}>(${isostep}-1e-6))") == True ]]; then
+      if [[ $(python -c "print(${dim}>(${_arg_isostep}-1e-6))") == True ]]; then
          #Special casing for zero/negative blurs
           blurs+=1e-12x
       else
-          blurs+=$(python -c "import math; print(math.sqrt((${isostep}**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
+          blurs+=$(python -c "import math; print(math.sqrt((${_arg_isostep}**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
       fi
   done
 
   mincmath -mult ${tmpdir}/vessels.mnc ${1} ${tmpdir}/${n}/presmooth_novessels.mnc
 
   SmoothImage 3 ${tmpdir}/${n}/presmooth_novessels.mnc "${blurs%?}" ${tmpdir}/${n}/smoothed.mnc 1 0
-  ResampleImage 3 ${tmpdir}/${n}/smoothed.mnc ${tmpdir}/${n}/isotropized.mnc ${isostep}x${isostep}x${isostep} 0 4
+  ResampleImage 3 ${tmpdir}/${n}/smoothed.mnc ${tmpdir}/${n}/isotropized.mnc ${_arg_isostep}x${_arg_isostep}x${_arg_isostep} 0 4
 
   mincmath -quiet -clamp -const2 0 65535 ${tmpdir}/${n}/isotropized.mnc ${tmpdir}/${n}/downsample.mnc
 
@@ -289,13 +521,13 @@ do_N3() {
     minccalc -unsigned -byte -expression 'A[0]>1?1:0' ${tmpdir}/${n}/downsample.mnc ${tmpdir}/${n}/nonzero.mnc
     antsApplyTransforms -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/${n}/tmpweight.mnc -r ${n3input} -n GenericLabel --verbose
     ImageMath 3 ${tmpdir}/${n}/tmpweight.mnc m ${tmpdir}/${n}/tmpweight.mnc ${tmpdir}/${n}/nonzero.mnc
-    distance=${origdistance}
+    distance=${_arg_distance}
     j=0
-    while (( j < levels )); do
+    while (( j < _arg_levels )); do
         i=0
-        while (( i < cycles )); do
+        while (( i < _arg_cycles )); do
             nu_correct -clobber -normalize_field \
-                -stop ${stop} -distance ${distance} -iterations ${iters} -fwhm ${fwhm} -shrink 1 -lambda ${lambda} \
+                -stop ${_arg_stop} -distance ${distance} -iterations ${_arg_iters} -fwhm ${_arg_fwhm} -shrink 1 -lambda ${_arg_lambda} \
                 -mask ${tmpdir}/${n}/tmpweight.mnc ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}.mnc
 
             evaluate_field -unsigned -double -clobber -like ${n3input} ${tmpdir}/${n}/corrected_${distance}_${i}.imp ${tmpdir}/${n}/corrected_${distance}_${i}_field.mnc
@@ -339,42 +571,52 @@ make_outlier_map() {
 
 tmpdir=$(mktemp -d)
 
-function finish {
-  if [[ ! -s ${tmpdir}/keep ]]; then
-    rm -rf "${tmpdir}"
-    echo "done"
-  fi
+#Setup exit trap for cleanup, don't do if debug
+function finish() {
+    if [[ ${_arg_debug} == "off" ]]; then
+        rm -rf "${tmpdir}"
+    else
+      warning "Debug enabled, temporary files at ${tmpdir} have not been cleaned up"
+    fi
 }
 trap finish EXIT
 
+
 #Add handler for failure to show where things went wrong
-failure() {
+failure_handler() {
     local lineno=$1
     local msg=$2
     echo "Failed at $lineno: $msg"
 }
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
+trap 'failure_handler ${LINENO} "$BASH_COMMAND"' ERR
+
+# Output checking
+if [[ "${_arg_clobber}" == "off" ]]; then
+  for file in ${_arg_output} \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mask.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc; do
+    if [[ -s "${file}" ]]; then
+      failure "File ${file} already exists and --clobber not specified!"
+    fi
+  done
+fi
 
 input=${_arg_input}
-output=${_arg_output}
 
-#Defaults
-origdistance=400
-distance=${origdistance}
-levels=4
-cycles=3
-iters=25
-lambda=2e-6
-shrink=4.0
-fwhm=0.1
-stop=1e-5
-isostep=4.0
 
-# Calulate a scaling factor for mm
+
+# Calulate a scaling factor for mm from isostep
 dx=$(mincinfo -attvalue xspace:step ${input})
 dy=$(mincinfo -attvalue yspace:step ${input})
 dz=$(mincinfo -attvalue zspace:step ${input})
-shrink=$(python -c "print(${shrink} / ( ( abs(${dx}) + abs(${dy}) + abs(${dz}) ) / 3.0 ))")
+shrink=$(python -c "print(${_arg_isostep} / ( ( abs(${dx}) + abs(${dy}) + abs(${dz}) ) / 3.0 ))")
 
 # Change the slicing direction to be the same as what ITK outputs by default
 mincreshape -dimorder zspace,yspace,xspace +direction ${input} ${tmpdir}/reshape1.mnc
@@ -391,7 +633,6 @@ minc_modify_header -dinsert zspace:direction_cosines=0,0,1 ${tmpdir}/reshape2.mn
 
 input=${tmpdir}/reshape2.mnc
 
-
 mincnorm -noclamp -cutoff 0.001 ${input} ${tmpdir}/originput.mnc
 mincmath -clamp -const2 0 inf ${tmpdir}/originput.mnc ${tmpdir}/norm.mnc
 mv -f ${tmpdir}/norm.mnc ${tmpdir}/originput.mnc
@@ -407,6 +648,8 @@ cp -f ${tmpdir}/input.mnc ${tmpdir}/origqcref.mnc
 volpad -noauto -distance 20 ${tmpdir}/input.mnc ${tmpdir}/pad.mnc
 mv -f ${tmpdir}/pad.mnc ${tmpdir}/input.mnc
 
+
+# Begin preprocessing
 n=0
 mkdir -p ${tmpdir}/${n}
 
@@ -438,7 +681,7 @@ n3input=${tmpdir}/input.mnc
 
 #Initial correction not used for the final outputs but rather just to enable good foreground-background masking
 N4BiasFieldCorrection -d 3 --verbose  -i ${n3input} \
-  -b [ ${distance} ] -s $(awk -v flt=${shrink} 'BEGIN { printf("%.0f", flt); }') \
+  -b [ ${_arg_distance} ] -s $(awk -v flt=${shrink} 'BEGIN { printf("%.0f", flt); }') \
   --histogram-sharpening [ 0.1,0.01,200 ] \
   -c [ 300x300x300x300x300,1e-5 ] \
   -x ${tmpdir}/bgmask.mnc -w ${tmpdir}/${n}/weight.mnc \
@@ -447,7 +690,8 @@ N4BiasFieldCorrection -d 3 --verbose  -i ${n3input} \
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/bias.mnc)
 origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/input.mnc)
 
-minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/correct.mnc -clobber
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" \
+  ${tmpdir}/input.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 
 ((++n))
@@ -498,13 +742,13 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/input.mnc ${tmpdir}/input_denoise.mnc
 
 #For the all-data N3, don't fit too tightly
-origlevels=${levels}
-levels=$(calc "${levels} - 1")
+origlevels=${_arg_levels}
+_arg_levels=$(calc "${_arg_levels} - 1")
 
 n3input=${tmpdir}/input_denoise.mnc
 do_N3
 
-levels=${origlevels}
+_arg_levels=${origlevels}
 
 mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
 
@@ -514,23 +758,25 @@ mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_
 origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/input.mnc)
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
 
-minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc \
+  ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
-antsRegistration_affine_SyN.sh --verbose --float --convergence 1e-7 \
-    --skip-nonlinear --fixed-mask ${REGISTRATIONMODELMASK} \
+antsRegistration_affine_SyN.sh --verbose --float --convergence 1e-6 --histogram-matching \
+    --skip-nonlinear --fixed-mask ${REGISTRATIONBRAINMASK} \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
 minccalc -unsigned -byte -expression '1' ${RESAMPLEMODEL} ${tmpdir}/model_fov.mnc
-mincresample -nofill -clobber -labels -near -like ${tmpdir}/input.mnc -transform ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/model_fov.mnc ${tmpdir}/subject_fov.mnc
+mincresample -nofill -clobber -labels -near -like ${tmpdir}/input.mnc -transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
+  ${tmpdir}/model_fov.mnc ${tmpdir}/subject_fov.mnc
 ImageMath 3 ${tmpdir}/fgmask_fov.mnc m ${tmpdir}/$(( n - 1 ))/fgmask.mnc ${tmpdir}/subject_fov.mnc
 cp -f ${tmpdir}/$(( n - 1 ))/fgmask.mnc ${tmpdir}/fgmask.mnc
 
-antsApplyTransforms -d 3 -i ${REGISTRATIONMODELMASK} \
+antsApplyTransforms -d 3 -i ${REGISTRATIONBRAINMASK} \
     -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] \
     -n GenericLabel --verbose -r ${tmpdir}/input.mnc \
     -o ${tmpdir}/${n}/mnimask.mnc
@@ -547,7 +793,6 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/vess
 iMath 3 ${tmpdir}/${n}/mnimask.mnc MC ${tmpdir}/${n}/weight.mnc 5 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mnimask.mnc FillHoles ${tmpdir}/${n}/mnimask.mnc 2
 
-#New test
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/vessels.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/$(( n - 1 ))/hotmask.mnc
 ThresholdImage 3 ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/weight.mnc
@@ -568,23 +813,25 @@ mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${
 correct_field ${tmpdir}/${n}/field_combined.mnc ${tmpdir}/${n}/correct_mask.mnc ${tmpdir}/${n}/field_combined_correct.mnc
 mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_correct.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
+mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc \
+  ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
 mv -f ${tmpdir}/${n}/field_combined_correct_clamp2.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
 origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/input.mnc)
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
 
-minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
+minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" \
+  ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
- antsRegistration_affine_SyN.sh --clobber --verbose --close --convergence 1e-7 \
+ antsRegistration_affine_SyN.sh --clobber --verbose --close --convergence 1e-6 --histogram-matching \
          --initial-transform ${tmpdir}/$(( n - 1 ))/mni0_GenericAffine.xfm \
          --skip-nonlinear \
-         --fixed-mask ${REGISTRATIONMODELMASK} \
+         --fixed-mask ${REGISTRATIONBRAINMASK} \
          --moving-mask ${tmpdir}/$(( n - 1 ))/mnimask.mnc \
          ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
@@ -599,10 +846,12 @@ mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} \
   --source_mask ${tmpdir}/${n}/mnimask_in_mni.mnc --target_mask ${RESAMPLEMASK} --clobber ${tmpdir}/${n}/mni.norm.mnc
-mincbeast -verbose -fill -median -same_res -flip -v2 -conf ${BEASTLIBRARY_DIR}/default.1mm.conf ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
+mincbeast -verbose -fill -median -same_res -flip -v2 -conf ${BEASTLIBRARY_DIR}/default.1mm.conf ${BEASTLIBRARY_DIR} \
+  ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
-antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -n GenericLabel --verbose \
-    -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/bmask.mnc
+antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] \
+  -n GenericLabel --verbose \
+  -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/bmask.mnc
 
 ImageMath 3 ${tmpdir}/${n}/bmask_temp.mnc m ${tmpdir}/${n}/bmask.mnc ${tmpdir}/vessels.mnc
 ThresholdImage 3 ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/bmask_fix.mnc Otsu 4 ${tmpdir}/${n}/bmask_temp.mnc
@@ -619,7 +868,7 @@ cp -f ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/bmask_fix.mnc
 antsRegistration_affine_SyN.sh --clobber --verbose \
     --fast --mask-extract \
     --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-    --skip-linear --fixed-mask ${REGISTRATIONMODELMASK} --moving-mask ${tmpdir}/${n}/bmask_fix.mnc \
+    --skip-linear --fixed-mask ${REGISTRATIONBRAINMASK} --moving-mask ${tmpdir}/${n}/bmask_fix.mnc \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
 antsApplyTransforms -d 3 -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
@@ -632,7 +881,7 @@ antsApplyTransforms -d 3 -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.x
     -n Linear --verbose \
     -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior1.mnc
 
-if [[ -n ${DEEPGMPRIOR} ]]; then
+if [[ -n ${DEEPGMPRIOR:-} ]]; then
   antsApplyTransforms -d 3 -i ${DEEPGMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
       -n Linear --verbose \
       -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior4.mnc
@@ -643,7 +892,7 @@ iMath 3 ${tmpdir}/${n}/bmask_D.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/bmask_D.mnc ${tmpdir}/vessels.mnc
 ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/$(( n - 1 ))/hotmask.mnc
 
-if [[ -n ${DEEPGMPRIOR} ]]; then
+if [[ -n ${DEEPGMPRIOR:-} ]]; then
   Atropos --verbose -d 3 -a ${tmpdir}/${n}/denoise.mnc -x ${tmpdir}/${n}/atropos_mask.mnc  -c [ 25, 0.005 ] \
       -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 0 ]  -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
       -l [ 0.69314718055994530942,1 ] \
@@ -667,7 +916,7 @@ make_outlier_map ${tmpdir}/${n}/denoise.mnc ${tmpdir}/fgmask.mnc ${tmpdir}/${n}/
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Last round we do a higher-resolution N3
-isostep=2.0
+_arg_isostep=$(calc "${_arg_isostep} / 2")
 
 n3input=${tmpdir}/${n}/denoise.mnc
 do_N3
@@ -680,7 +929,8 @@ mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${
 correct_field ${tmpdir}/${n}/field_combined.mnc ${tmpdir}/${n}/correct_mask.mnc ${tmpdir}/${n}/field_combined_correct.mnc
 mincmath -clobber -clamp -const2 0.1 1.79769e+308 ${tmpdir}/${n}/field_combined_correct.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
-mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
+mincmath -clobber -unsigned -double -mult ${tmpdir}/$(( n - 1 ))/field_combined_correct_clamp.mnc \
+  ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp2.mnc
 mv -f ${tmpdir}/${n}/field_combined_correct_clamp2.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc
 
 
@@ -688,13 +938,14 @@ origmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue
 biasmean=$(mincstats -mean -quiet -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 ${tmpdir}/${n}/field_combined_correct_clamp.mnc)
 
 if [[ ${_arg_standalone} == "on" ]]; then
-    minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
+    minccalc -unsigned -short -expression "clamp((A[0]/${origmean})/(A[1]/${biasmean})*32767,0,65535)" \
+      ${tmpdir}/input.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/correct.mnc -clobber
 
     cp -f ${tmpdir}/${n}/correct.mnc ${tmpdir}/corrected.mnc
 
     minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
 
-    if [[ -n ${DEEPGMPRIOR} ]]; then
+    if [[ -n ${DEEPGMPRIOR:-} ]]; then
     Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
         -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
         -l [ 0.69314718055994530942,1 ] \
@@ -726,19 +977,23 @@ if [[ ${_arg_standalone} == "on" ]]; then
     ImageMath 3 ${tmpdir}/corrected.mnc m ${tmpdir}/corrected.mnc ${tmpdir}/fgmask_fov.mnc
     ExtractRegionFromImageByMask 3 ${tmpdir}/corrected.mnc ${tmpdir}/repad.mnc ${tmpdir}/fgmask_fov.mnc 1 $(calc "int(10.0*4.0/${shrink})")
     cp -f ${tmpdir}/repad.mnc ${tmpdir}/corrected.mnc
-    mincresample -unsigned -short -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/corrected.mnc ${output} -clobber
+    mincresample -clobber -unsigned -short -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/corrected.mnc ${_arg_output}
 
     minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned \
         -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
         ${tmpdir}/corrected.mnc ${tmpdir}/rescale.mnc
 
-    mincresample -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
-        $(dirname ${output})/$(basename ${output} .mnc).rescale.mnc -clobber
+    mincresample -clobber -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
+        $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc
 
-    mincresample -like ${output} -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${output})/$(basename ${output} .mnc).mask.mnc
-    mincresample -like ${output} -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${output})/$(basename ${output} .mnc).classify.mnc
+    mincresample -clobber -like ${_arg_output} -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc
+    mincresample -clobber -like ${_arg_output} -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc
 
     make_qc
+
+    cp ${tmpdir}/${n}/mni0_GenericAffine.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm
 
     #Create LSQ6 version of affine transform
     xfminvert ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine_invert.xfm
@@ -746,15 +1001,18 @@ if [[ ${_arg_standalone} == "on" ]]; then
     xfminvert ${tmpdir}/scaleshear.xfm ${tmpdir}/unscaleshear.xfm
     xfmconcat ${tmpdir}/mni0_GenericAffine_invert.xfm ${tmpdir}/unscaleshear.xfm ${tmpdir}/lsq6.xfm
 
-    mincresample -unsigned -short -tfm_input_sampling -transform ${tmpdir}/lsq6.xfm ${tmpdir}/corrected.mnc $(dirname ${output})/$(basename ${output} .mnc).lsq6.mnc
-    mincresample -transform ${tmpdir}/lsq6.xfm -like $(dirname ${output})/$(basename ${output} .mnc).lsq6.mnc \
-    -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${output})/$(basename ${output} .mnc).lsq6.mask.mnc
-    mincresample -transform ${tmpdir}/lsq6.xfm -like $(dirname ${output})/$(basename ${output} .mnc).lsq6.mnc \
-    -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${output})/$(basename ${output} .mnc).lsq6.classify.mnc
+    mincresample -clobber -unsigned -short -tfm_input_sampling -transform ${tmpdir}/lsq6.xfm ${tmpdir}/corrected.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc
+    mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
+        -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mask.mnc
+    mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
+        -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc
 else
-    mincresample -fillvalue 1 -like ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc
-    minccalc -expression "A[0]/(A[1]/${biasmean})" ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc ${tmpdir}/backtransform.mnc
-    mincresample -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/backtransform.mnc ${output} -clobber
+    mincresample -fillvalue 1 -like ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc \
+      ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc
+    minccalc -expression "A[0]/(A[1]/${biasmean})" ${tmpdir}/originput.mnc \
+      ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc ${tmpdir}/backtransform.mnc
+    mincresample -clobber -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/backtransform.mnc ${_arg_output}
 fi
 
 # ] <-- needed because of Argbash
