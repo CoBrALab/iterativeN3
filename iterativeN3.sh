@@ -380,7 +380,7 @@ function make_qc() {
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/${n}/classify2.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-        -i $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+        -i ${tmpdir}/rescale.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/origqcref.mnc -o ${tmpdir}/qc/orig.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/corrected.mnc ${tmpdir}/qc/corrected.clamp.mnc
@@ -986,14 +986,14 @@ if [[ ${_arg_standalone} == "on" ]]; then
     mincresample -clobber -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
         $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc
 
-    mincresample -clobber -like ${_arg_output} -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc \
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc \
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc
-    mincresample -clobber -like ${_arg_output} -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc \
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc \
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc
 
     make_qc
 
-    cp ${tmpdir}/${n}/mni0_GenericAffine.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm
+    xfmconcat ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/transform_to_input.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm
 
     #Create LSQ6 version of affine transform
     xfminvert ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine_invert.xfm
