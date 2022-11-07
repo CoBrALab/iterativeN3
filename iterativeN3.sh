@@ -10,6 +10,7 @@
 # ARG_OPTIONAL_SINGLE([fwhm],[],[Intensity histogram smoothing fwhm],[0.1])
 # ARG_OPTIONAL_SINGLE([stop],[],[Stopping criterion for N3],[1e-5])
 # ARG_OPTIONAL_SINGLE([isostep],[],[Isotropic resampling resolution in mm for N3],[4])
+# ARG_OPTIONAL_BOOLEAN([vessels],[],[Attempt to detect and exclude blood vessels],[on])
 # ARG_OPTIONAL_SINGLE([lsq6-resample-type],[],[(Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates" or a number for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space],[coordinates])
 # ARG_OPTIONAL_SINGLE([prior-config],[],[Config file to use for models and priors],[mni_icbm152_nlin_sym_09c.cfg])
 # ARG_OPTIONAL_BOOLEAN([clobber],[c],[Overwrite files that already exist])
@@ -52,6 +53,7 @@ _arg_lambda="2e-6"
 _arg_fwhm="0.1"
 _arg_stop="1e-5"
 _arg_isostep="4"
+_arg_vessels="on"
 _arg_lsq6_resample_type="coordinates"
 _arg_prior_config="mni_icbm152_nlin_sym_09c.cfg"
 _arg_clobber="off"
@@ -62,7 +64,7 @@ _arg_debug="off"
 print_help()
 {
 	printf '%s\n' "iterativeN3 imhomogenaeity correction"
-	printf 'Usage: %s [-h|--help] [--(no-)standalone] [--distance <arg>] [--levels <arg>] [--cycles <arg>] [--iters <arg>] [--lambda <arg>] [--fwhm <arg>] [--stop <arg>] [--isostep <arg>] [--lsq6-resample-type <arg>] [--prior-config <arg>] [-c|--(no-)clobber] [-v|--(no-)verbose] [-d|--(no-)debug] <input> <output>\n' "$0"
+	printf 'Usage: %s [-h|--help] [--(no-)standalone] [--distance <arg>] [--levels <arg>] [--cycles <arg>] [--iters <arg>] [--lambda <arg>] [--fwhm <arg>] [--stop <arg>] [--isostep <arg>] [--(no-)vessels] [--lsq6-resample-type <arg>] [--prior-config <arg>] [-c|--(no-)clobber] [-v|--(no-)verbose] [-d|--(no-)debug] <input> <output>\n' "$0"
 	printf '\t%s\n' "<input>: Input MINC file"
 	printf '\t%s\n' "<output>: Output MINC File"
 	printf '\t%s\n' "-h, --help: Prints help"
@@ -75,6 +77,7 @@ print_help()
 	printf '\t%s\n' "--fwhm: Intensity histogram smoothing fwhm (default: '0.1')"
 	printf '\t%s\n' "--stop: Stopping criterion for N3 (default: '1e-5')"
 	printf '\t%s\n' "--isostep: Isotropic resampling resolution in mm for N3 (default: '4')"
+	printf '\t%s\n' "--vessels, --no-vessels: Attempt to detect and exclude blood vessels (on by default)"
 	printf '\t%s\n' "--lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be \"coordinates\" or a number for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'coordinates')"
 	printf '\t%s\n' "--prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')"
 	printf '\t%s\n' "-c, --clobber, --no-clobber: Overwrite files that already exist (off by default)"
@@ -165,6 +168,10 @@ parse_commandline()
 				;;
 			--isostep=*)
 				_arg_isostep="${_key##--isostep=}"
+				;;
+			--no-vessels|--vessels)
+				_arg_vessels="on"
+				test "${1:0:5}" = "--no-" && _arg_vessels="off"
 				;;
 			--lsq6-resample-type)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -670,9 +677,13 @@ mkdir -p ${tmpdir}/${n}
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/input.mnc ${tmpdir}/${n}/denoise.mnc
 
-#Masking of blood vessels
-itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/${n}/denoise.mnc ${tmpdir}/vessels.mnc
-ThresholdImage 3 ${tmpdir}/vessels.mnc ${tmpdir}/vessels.mnc 35 Inf 0 1
+if [[ ${_arg_vessels} == "on" ]]; then
+    #Masking of blood vessels
+    itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/input.mnc ${tmpdir}/vessels.mnc
+    ThresholdImage 3 ${tmpdir}/vessels.mnc ${tmpdir}/vessels.mnc 35 Inf 0 1
+else
+    minccalc -unsigned -byte -expression '1' ${tmpdir}/input.mnc ${tmpdir}/vessels.mnc
+fi
 
 #Round 1, Otsu mask of foreground
 ThresholdImage 3 ${tmpdir}/input.mnc ${tmpdir}/${n}/bgmask.mnc 1 Inf 1 0
@@ -723,9 +734,13 @@ mv -f ${tmpdir}/pad.mnc ${tmpdir}/input.mnc
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
-#Masking of blood vessels
-itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/${n}/denoise.mnc ${tmpdir}/vessels.mnc
-ThresholdImage 3 ${tmpdir}/vessels.mnc ${tmpdir}/vessels.mnc 35 Inf 0 1
+if [[ ${_arg_vessels} == "on" ]]; then
+    #Masking of blood vessels
+    itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/vessels.mnc
+    ThresholdImage 3 ${tmpdir}/vessels.mnc ${tmpdir}/vessels.mnc 35 Inf 0 1
+else
+    minccalc -clobber -unsigned -byte -expression  '1' ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/vessels.mnc
+fi
 
 #Redo the Otsu mask a second time using the precorrected image
 ThresholdImage 3 ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/bgmask.mnc 1 Inf 1 0
