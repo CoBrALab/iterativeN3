@@ -623,6 +623,7 @@ if [[ "${_arg_clobber}" == "off" ]]; then
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior4.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).ICV.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
@@ -1001,6 +1002,14 @@ if [[ ${_arg_standalone} == "on" ]]; then
     # valuehigh=$(mincstats -quiet -floor 1 -pctT 99.9 ${tmpdir}/corrected.mnc)
     # mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
 
+    # Calculate ICV, referenced to model
+    mincmath -not ${REGISTRATIONBRAINMASK} ${tmpdir}/${n}/model_antimask.mnc
+    mincmath -not ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/${n}/bmask_fix_antimask.mnc
+    antsRegistration_affine_SyN.sh --clobber --verbose --convergence 1e-6 --histogram-matching \
+            --skip-nonlinear \
+            --fixed-mask ${tmpdir}/${n}/model_antimask.mnc \
+            --moving-mask ${tmpdir}/${n}/bmask_fix_antimask.mnc \
+            ${tmpdir}/denoise_corrected.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/icv
 
     #Re pad final image using model FOV mask
     volpad -noauto -distance 50 ${tmpdir}/corrected.mnc ${tmpdir}/corrected_pad.mnc
@@ -1038,6 +1047,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
     make_qc
 
     xfmconcat ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/transform_to_input.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm
+    cp -f ${tmpdir}/${n}/icv0_GenericAffine.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).ICV.xfm
 
     if [[ "${_arg_lsq6_resample_type}" != "none" ]]; then
       # Create LSQ6 version of affine transform
