@@ -978,13 +978,15 @@ if [[ ${_arg_standalone} == "on" ]]; then
     Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
         -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
         -l [ 0.69314718055994530942,1 ] \
-        -i PriorProbabilityImages[ 4,${tmpdir}/${n}/posterior%d.mnc,0.25 ] -o ${tmpdir}/${n}/classify2.mnc \
+        -i PriorProbabilityImages[ 4,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
+        -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
         --winsorize-outliers BoxPlot
     else
     Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
         -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 \
         -l [ 0.69314718055994530942,1 ] \
-        -i PriorProbabilityImages[ 3,${tmpdir}/${n}/posterior%d.mnc,0.25 ] -o ${tmpdir}/${n}/classify2.mnc \
+        -i PriorProbabilityImages[ 3,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
+        -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
         --winsorize-outliers BoxPlot
     fi
 
@@ -1021,6 +1023,12 @@ if [[ ${_arg_standalone} == "on" ]]; then
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc
     mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc \
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc
+
+    # Resample to output the posterior probabilities from classification
+    for file in ${tmpdir}/${n}/posterior?.mnc; do
+      mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -unsigned -float ${file} \
+        $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).$(basename ${file})
+    done
 
     make_qc
 
