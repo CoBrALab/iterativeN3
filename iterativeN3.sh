@@ -402,7 +402,7 @@ function make_qc() {
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/${n}/classify2.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-        -i ${tmpdir}/rescale.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+        -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/origqcref.mnc -o ${tmpdir}/qc/orig.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/corrected.mnc ${tmpdir}/qc/corrected.clamp.mnc
@@ -620,7 +620,6 @@ if [[ "${_arg_clobber}" == "off" ]]; then
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg \
-              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mask.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc; do
@@ -989,12 +988,12 @@ if [[ ${_arg_standalone} == "on" ]]; then
         --winsorize-outliers BoxPlot
     fi
 
-    valuelow=$(mincstats -quiet -floor 1 -pctT 0.1 ${tmpdir}/corrected.mnc)
-    valuewm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 3 ${tmpdir}/corrected.mnc)
-    valuegm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 2 ${tmpdir}/corrected.mnc)
-    valuehigh=$(mincstats -quiet -floor 1 -pctT 99.9 ${tmpdir}/corrected.mnc)
+    # valuelow=$(mincstats -quiet -floor 1 -pctT 0.1 ${tmpdir}/corrected.mnc)
+    # valuewm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 3 ${tmpdir}/corrected.mnc)
+    # valuegm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 2 ${tmpdir}/corrected.mnc)
+    # valuehigh=$(mincstats -quiet -floor 1 -pctT 99.9 ${tmpdir}/corrected.mnc)
+    # mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
 
-    mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
 
     #Re pad final image using model FOV mask
     volpad -noauto -distance 50 ${tmpdir}/corrected.mnc ${tmpdir}/corrected_pad.mnc
@@ -1011,12 +1010,12 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     minc_anlm --mt $(nproc) ${_arg_output} $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc
 
-    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned \
-        -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
-        ${tmpdir}/corrected.mnc ${tmpdir}/rescale.mnc
+    # minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned \
+    #     -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
+    #     ${tmpdir}/corrected.mnc ${tmpdir}/rescale.mnc
 
-    mincresample -clobber -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
-        $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc
+    # mincresample -clobber -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
+    #     $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc
 
     mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc \
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc
