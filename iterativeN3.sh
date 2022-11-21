@@ -11,7 +11,7 @@
 # ARG_OPTIONAL_SINGLE([stop],[],[Stopping criterion for N3],[1e-5])
 # ARG_OPTIONAL_SINGLE([isostep],[],[Isotropic resampling resolution in mm for N3],[4])
 # ARG_OPTIONAL_BOOLEAN([vessels],[],[Attempt to detect and exclude blood vessels],[on])
-# ARG_OPTIONAL_SINGLE([lsq6-resample-type],[],[(Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates" or a number for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space],[coordinates])
+# ARG_OPTIONAL_SINGLE([lsq6-resample-type],[],[(Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates", "none", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space],[none])
 # ARG_OPTIONAL_SINGLE([prior-config],[],[Config file to use for models and priors],[mni_icbm152_nlin_sym_09c.cfg])
 # ARG_OPTIONAL_BOOLEAN([clobber],[c],[Overwrite files that already exist])
 # ARG_OPTIONAL_BOOLEAN([verbose],[v],[Run commands verbosely],[on])
@@ -54,7 +54,7 @@ _arg_fwhm="0.1"
 _arg_stop="1e-5"
 _arg_isostep="4"
 _arg_vessels="on"
-_arg_lsq6_resample_type="coordinates"
+_arg_lsq6_resample_type="none"
 _arg_prior_config="mni_icbm152_nlin_sym_09c.cfg"
 _arg_clobber="off"
 _arg_verbose="on"
@@ -78,7 +78,7 @@ print_help()
 	printf '\t%s\n' "--stop: Stopping criterion for N3 (default: '1e-5')"
 	printf '\t%s\n' "--isostep: Isotropic resampling resolution in mm for N3 (default: '4')"
 	printf '\t%s\n' "--vessels, --no-vessels: Attempt to detect and exclude blood vessels (on by default)"
-	printf '\t%s\n' "--lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be \"coordinates\" or a number for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'coordinates')"
+	printf '\t%s\n' "--lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be \"coordinates\", \"none\", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'none')"
 	printf '\t%s\n' "--prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')"
 	printf '\t%s\n' "-c, --clobber, --no-clobber: Overwrite files that already exist (off by default)"
 	printf '\t%s\n' "-v, --verbose, --no-verbose: Run commands verbosely (on by default)"
@@ -1034,28 +1034,27 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     xfmconcat ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/transform_to_input.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm
 
-    #Create LSQ6 version of affine transform
-    xfminvert ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine_invert.xfm
-    param2xfm $(xfm2param ${tmpdir}/mni0_GenericAffine_invert.xfm | grep -E 'scale|shear') ${tmpdir}/scaleshear.xfm
-    xfminvert ${tmpdir}/scaleshear.xfm ${tmpdir}/unscaleshear.xfm
-    xfmconcat ${tmpdir}/mni0_GenericAffine_invert.xfm ${tmpdir}/unscaleshear.xfm ${tmpdir}/lsq6.xfm
+    if [[ "${_arg_lsq6_resample_type}" != "none" ]]; then
+      # Create LSQ6 version of affine transform
+      xfminvert ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine_invert.xfm
+      param2xfm $(xfm2param ${tmpdir}/mni0_GenericAffine_invert.xfm | grep -E 'scale|shear') ${tmpdir}/scaleshear.xfm
+      xfminvert ${tmpdir}/scaleshear.xfm ${tmpdir}/unscaleshear.xfm
+      xfmconcat ${tmpdir}/mni0_GenericAffine_invert.xfm ${tmpdir}/unscaleshear.xfm ${tmpdir}/lsq6.xfm
 
-    if [[  ${_arg_lsq6_resample_type} == "coordinates" ]]; then
-      mincresample -clobber -unsigned -short -tfm_input_sampling -transform ${tmpdir}/lsq6.xfm ${tmpdir}/corrected.mnc \
-        $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc
-    elif [[ $(calc "${_arg_lsq6_resample_type}==1") == 1 ]]; then
-      mincresample -clobber -unsigned -short -like ${RESAMPLEMODEL} -transform ${tmpdir}/lsq6.xfm ${tmpdir}/corrected.mnc \
-        $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc
-    else
-      ResampleImage 3 ${RESAMPLEMODEL} ${tmpdir}/resamplemodel.mnc ${_arg_lsq6_resample_type}x${_arg_lsq6_resample_type}x${_arg_lsq6_resample_type} 0
-      mincresample -clobber -unsigned -short -like ${tmpdir}/resamplemodel.mnc -transform ${tmpdir}/lsq6.xfm ${tmpdir}/corrected.mnc \
-        $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc
+      if [[  ${_arg_lsq6_resample_type} == "coordinates" ]]; then
+        mincresample -clobber -unsigned -short -tfm_input_sampling -transform ${tmpdir}/lsq6.xfm ${tmpdir}/corrected.mnc \
+          $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc
+      else
+        ResampleImage 3 ${RESAMPLEMODEL} ${tmpdir}/resamplemodel.mnc ${_arg_lsq6_resample_type}x${_arg_lsq6_resample_type}x${_arg_lsq6_resample_type} 0
+        mincresample -clobber -unsigned -short -like ${tmpdir}/resamplemodel.mnc -transform ${tmpdir}/lsq6.xfm ${tmpdir}/corrected.mnc \
+          $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc
+      fi
+
+      mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
+          -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mask.mnc
+      mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
+          -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc
     fi
-
-    mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
-        -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mask.mnc
-    mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
-        -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc
 else
     mincresample -fillvalue 1 -like ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc \
       ${tmpdir}/${n}/field_combined_correct_clamp_orig.mnc
