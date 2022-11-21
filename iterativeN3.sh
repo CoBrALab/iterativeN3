@@ -10,7 +10,7 @@
 # ARG_OPTIONAL_SINGLE([fwhm],[],[Intensity histogram smoothing fwhm],[0.1])
 # ARG_OPTIONAL_SINGLE([stop],[],[Stopping criterion for N3],[1e-5])
 # ARG_OPTIONAL_SINGLE([isostep],[],[Isotropic resampling resolution in mm for N3],[4])
-# ARG_OPTIONAL_BOOLEAN([vessels],[],[Attempt to detect and exclude blood vessels],[on])
+# ARG_OPTIONAL_BOOLEAN([vessels],[],[Attempt to detect and exclude blood vessels],[off])
 # ARG_OPTIONAL_SINGLE([lsq6-resample-type],[],[(Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates", "none", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space],[none])
 # ARG_OPTIONAL_SINGLE([prior-config],[],[Config file to use for models and priors],[mni_icbm152_nlin_sym_09c.cfg])
 # ARG_OPTIONAL_BOOLEAN([clobber],[c],[Overwrite files that already exist])
@@ -53,7 +53,7 @@ _arg_lambda="2e-6"
 _arg_fwhm="0.1"
 _arg_stop="1e-5"
 _arg_isostep="4"
-_arg_vessels="on"
+_arg_vessels="off"
 _arg_lsq6_resample_type="none"
 _arg_prior_config="mni_icbm152_nlin_sym_09c.cfg"
 _arg_clobber="off"
@@ -77,7 +77,7 @@ print_help()
 	printf '\t%s\n' "--fwhm: Intensity histogram smoothing fwhm (default: '0.1')"
 	printf '\t%s\n' "--stop: Stopping criterion for N3 (default: '1e-5')"
 	printf '\t%s\n' "--isostep: Isotropic resampling resolution in mm for N3 (default: '4')"
-	printf '\t%s\n' "--vessels, --no-vessels: Attempt to detect and exclude blood vessels (on by default)"
+	printf '\t%s\n' "--vessels, --no-vessels: Attempt to detect and exclude blood vessels (off by default)"
 	printf '\t%s\n' "--lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be \"coordinates\", \"none\", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'none')"
 	printf '\t%s\n' "--prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')"
 	printf '\t%s\n' "-c, --clobber, --no-clobber: Overwrite files that already exist (off by default)"
