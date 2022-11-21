@@ -617,6 +617,11 @@ if [[ "${_arg_clobber}" == "off" ]]; then
   for file in ${_arg_output} \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior1.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior2.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior3.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior4.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg \
