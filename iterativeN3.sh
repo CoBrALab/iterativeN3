@@ -13,6 +13,8 @@
 # ARG_OPTIONAL_BOOLEAN([vessels],[],[Attempt to detect and exclude blood vessels],[off])
 # ARG_OPTIONAL_SINGLE([lsq6-resample-type],[],[(Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates", "none", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space],[none])
 # ARG_OPTIONAL_SINGLE([prior-config],[],[Config file to use for models and priors],[mni_icbm152_nlin_sym_09c.cfg])
+# ARG_OPTIONAL_BOOLEAN([fast-nlin],[],[Perform fast non-linear registration using Mattes similarity],[on])
+# ARG_OPTIONAL_BOOLEAN([save-nlin],[],[Save the non-linear trasnformation to the model, implies --no-fast-nlin])
 # ARG_OPTIONAL_BOOLEAN([clobber],[c],[Overwrite files that already exist])
 # ARG_OPTIONAL_BOOLEAN([verbose],[v],[Run commands verbosely],[on])
 # ARG_OPTIONAL_BOOLEAN([debug],[d],[Show all internal comands and logic for debug],[])
@@ -56,6 +58,8 @@ _arg_isostep="4"
 _arg_vessels="off"
 _arg_lsq6_resample_type="none"
 _arg_prior_config="mni_icbm152_nlin_sym_09c.cfg"
+_arg_fast_nlin="on"
+_arg_save_nlin="off"
 _arg_clobber="off"
 _arg_verbose="on"
 _arg_debug="off"
@@ -64,7 +68,7 @@ _arg_debug="off"
 print_help()
 {
 	printf '%s\n' "iterativeN3 imhomogenaeity correction"
-	printf 'Usage: %s [-h|--help] [--(no-)standalone] [--distance <arg>] [--levels <arg>] [--cycles <arg>] [--iters <arg>] [--lambda <arg>] [--fwhm <arg>] [--stop <arg>] [--isostep <arg>] [--(no-)vessels] [--lsq6-resample-type <arg>] [--prior-config <arg>] [-c|--(no-)clobber] [-v|--(no-)verbose] [-d|--(no-)debug] <input> <output>\n' "$0"
+	printf 'Usage: %s [-h|--help] [--(no-)standalone] [--distance <arg>] [--levels <arg>] [--cycles <arg>] [--iters <arg>] [--lambda <arg>] [--fwhm <arg>] [--stop <arg>] [--isostep <arg>] [--(no-)vessels] [--lsq6-resample-type <arg>] [--prior-config <arg>] [--(no-)fast-nlin] [--(no-)save-nlin] [-c|--(no-)clobber] [-v|--(no-)verbose] [-d|--(no-)debug] <input> <output>\n' "$0"
 	printf '\t%s\n' "<input>: Input MINC file"
 	printf '\t%s\n' "<output>: Output MINC File"
 	printf '\t%s\n' "-h, --help: Prints help"
@@ -80,6 +84,8 @@ print_help()
 	printf '\t%s\n' "--vessels, --no-vessels: Attempt to detect and exclude blood vessels (off by default)"
 	printf '\t%s\n' "--lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be \"coordinates\", \"none\", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'none')"
 	printf '\t%s\n' "--prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')"
+	printf '\t%s\n' "--fast-nlin, --no-fast-nlin: Perform fast non-linear registration using Mattes similarity (on by default)"
+	printf '\t%s\n' "--save-nlin, --no-save-nlin: Save the non-linear trasnformation to the model, implies --no-fast-nlin (off by default)"
 	printf '\t%s\n' "-c, --clobber, --no-clobber: Overwrite files that already exist (off by default)"
 	printf '\t%s\n' "-v, --verbose, --no-verbose: Run commands verbosely (on by default)"
 	printf '\t%s\n' "-d, --debug, --no-debug: Show all internal comands and logic for debug (off by default)"
@@ -188,6 +194,14 @@ parse_commandline()
 				;;
 			--prior-config=*)
 				_arg_prior_config="${_key##--prior-config=}"
+				;;
+			--no-fast-nlin|--fast-nlin)
+				_arg_fast_nlin="on"
+				test "${1:0:5}" = "--no-" && _arg_fast_nlin="off"
+				;;
+			--no-save-nlin|--save-nlin)
+				_arg_save_nlin="on"
+				test "${1:0:5}" = "--no-" && _arg_save_nlin="off"
 				;;
 			-c|--no-clobber|--clobber)
 				_arg_clobber="on"
@@ -635,6 +649,13 @@ if [[ "${_arg_clobber}" == "off" ]]; then
   done
 fi
 
+# Save-nlin and fast mangling
+if [[ ${_arg_save_nlin} == "on" || ${_arg_fast_nlin} == "off" ]]; then
+  _arg_fast_nlin=""
+else
+  _arg_fast_nlin="--fast"
+fi
+
 input=${_arg_input}
 
 
@@ -901,7 +922,7 @@ iMath 3 ${tmpdir}/${n}/bmask_fix.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
 cp -f ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/bmask_fix.mnc
 
 antsRegistration_affine_SyN.sh --clobber --verbose \
-    --fast --mask-extract \
+    ${_arg_fast_nlin} --mask-extract \
     --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
     --skip-linear --fixed-mask ${REGISTRATIONBRAINMASK} --moving-mask ${tmpdir}/${n}/bmask_fix.mnc \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
@@ -1048,6 +1069,11 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     xfmconcat ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/transform_to_input.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm
     cp -f ${tmpdir}/${n}/icv0_GenericAffine.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).ICV.xfm
+    if [[ ${_arg_save_nlin} ]]; then
+      cp -f ${tmpdir}/3/mni1_NL.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm
+      cp -f ${tmpdir}/3/mni1_NL_grid_0.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model_grid_0.mnc
+      sed -i "s/mni1_NL_grid_0.mnc/$(basename ${_arg_output} .mnc).nlin_to_model_grid_0.mnc/g" $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm
+    fi
 
     if [[ "${_arg_lsq6_resample_type}" != "none" ]]; then
       # Create LSQ6 version of affine transform
