@@ -402,7 +402,13 @@ RESAMPLEMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_i
 RESAMPLEMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
 
 # Load configuration
-source ${__dir}/configs/${_arg_prior_config}
+if [[ -s  ${_arg_prior_config} ]]; then
+  source ${_arg_prior_config}
+elif [[ -s ${__dir}/configs/${_arg_prior_config} ]]; then
+  source ${__dir}/configs/${_arg_prior_config}
+else
+  failure "${_arg_prior_config} not found"
+fi
 
 #Calculator for maths
 calc () { awk "BEGIN{ print $* }" ;}
