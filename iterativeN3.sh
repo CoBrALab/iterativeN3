@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# ARG_HELP([iterativeN3 imhomogenaeity correction])
-# ARG_OPTIONAL_BOOLEAN([standalone],[],[Save intermediate outputs during processing])
+# ARG_HELP([iterativeN3 inhomogeneity correction])
+# ARG_OPTIONAL_BOOLEAN([standalone],[],[Save secondary outputs during processing],[on])
 # ARG_OPTIONAL_SINGLE([distance],[],[Initial distance for correction],[400])
 # ARG_OPTIONAL_SINGLE([levels],[],[Levels of correction with distance halving],[4])
 # ARG_OPTIONAL_SINGLE([cycles],[],[Cycles of correction at each level],[3])
@@ -14,10 +14,10 @@
 # ARG_OPTIONAL_SINGLE([lsq6-resample-type],[],[(Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates", "none", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space],[none])
 # ARG_OPTIONAL_SINGLE([prior-config],[],[Config file to use for models and priors],[mni_icbm152_nlin_sym_09c.cfg])
 # ARG_OPTIONAL_BOOLEAN([fast-nlin],[],[Perform fast non-linear registration using Mattes similarity],[on])
-# ARG_OPTIONAL_BOOLEAN([save-nlin],[],[Save the non-linear trasnformation to the model, implies --no-fast-nlin])
+# ARG_OPTIONAL_BOOLEAN([save-nlin],[],[Save the non-linear transformation to the model, implies --no-fast-nlin])
 # ARG_OPTIONAL_BOOLEAN([clobber],[c],[Overwrite files that already exist])
 # ARG_OPTIONAL_BOOLEAN([verbose],[v],[Run commands verbosely],[on])
-# ARG_OPTIONAL_BOOLEAN([debug],[d],[Show all internal comands and logic for debug],[])
+# ARG_OPTIONAL_BOOLEAN([debug],[d],[Show all internal commands and logic for debug],[])
 # ARG_POSITIONAL_SINGLE([input],[Input MINC file])
 # ARG_POSITIONAL_SINGLE([output],[Output MINC File])
 # ARGBASH_GO()
@@ -46,7 +46,7 @@ begins_with_short_option()
 # THE DEFAULTS INITIALIZATION - POSITIONALS
 _positionals=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
-_arg_standalone="off"
+_arg_standalone="on"
 _arg_distance="400"
 _arg_levels="4"
 _arg_cycles="3"
@@ -67,12 +67,12 @@ _arg_debug="off"
 
 print_help()
 {
-	printf '%s\n' "iterativeN3 imhomogenaeity correction"
+	printf '%s\n' "iterativeN3 inhomogeneity correction"
 	printf 'Usage: %s [-h|--help] [--(no-)standalone] [--distance <arg>] [--levels <arg>] [--cycles <arg>] [--iters <arg>] [--lambda <arg>] [--fwhm <arg>] [--stop <arg>] [--isostep <arg>] [--(no-)vessels] [--lsq6-resample-type <arg>] [--prior-config <arg>] [--(no-)fast-nlin] [--(no-)save-nlin] [-c|--(no-)clobber] [-v|--(no-)verbose] [-d|--(no-)debug] <input> <output>\n' "$0"
 	printf '\t%s\n' "<input>: Input MINC file"
 	printf '\t%s\n' "<output>: Output MINC File"
 	printf '\t%s\n' "-h, --help: Prints help"
-	printf '\t%s\n' "--standalone, --no-standalone: Save intermediate outputs during processing (off by default)"
+	printf '\t%s\n' "--standalone, --no-standalone: Save secondary outputs during processing (on by default)"
 	printf '\t%s\n' "--distance: Initial distance for correction (default: '400')"
 	printf '\t%s\n' "--levels: Levels of correction with distance halving (default: '4')"
 	printf '\t%s\n' "--cycles: Cycles of correction at each level (default: '3')"
@@ -85,10 +85,10 @@ print_help()
 	printf '\t%s\n' "--lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be \"coordinates\", \"none\", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'none')"
 	printf '\t%s\n' "--prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')"
 	printf '\t%s\n' "--fast-nlin, --no-fast-nlin: Perform fast non-linear registration using Mattes similarity (on by default)"
-	printf '\t%s\n' "--save-nlin, --no-save-nlin: Save the non-linear trasnformation to the model, implies --no-fast-nlin (off by default)"
+	printf '\t%s\n' "--save-nlin, --no-save-nlin: Save the non-linear transformation to the model, implies --no-fast-nlin (off by default)"
 	printf '\t%s\n' "-c, --clobber, --no-clobber: Overwrite files that already exist (off by default)"
 	printf '\t%s\n' "-v, --verbose, --no-verbose: Run commands verbosely (on by default)"
-	printf '\t%s\n' "-d, --debug, --no-debug: Show all internal comands and logic for debug (off by default)"
+	printf '\t%s\n' "-d, --debug, --no-debug: Show all internal commands and logic for debug (off by default)"
 }
 
 
