@@ -1075,7 +1075,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     xfmconcat ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/transform_to_input.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm
     cp -f ${tmpdir}/${n}/icv0_GenericAffine.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).ICV.xfm
-    if [[ ${_arg_save_nlin} ]]; then
+    if [[ ${_arg_save_nlin} == "on" ]]; then
       cp -f ${tmpdir}/3/mni1_NL.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm
       cp -f ${tmpdir}/3/mni1_NL_grid_0.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model_grid_0.mnc
       sed -i "s/mni1_NL_grid_0.mnc/$(basename ${_arg_output} .mnc).nlin_to_model_grid_0.mnc/g" $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm
