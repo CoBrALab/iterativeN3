@@ -898,9 +898,11 @@ minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/$
          ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
 antsApplyTransforms -d 3 --verbose -i ${tmpdir}/${n}/denoise.mnc -r ${RESAMPLEMODEL} \
+    ${MNI_XFM:+-t ${MNI_XFM}} \
     -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc
 
 antsApplyTransforms -d 3 --verbose -i ${tmpdir}/$(( n - 1 ))/mnimask.mnc -r ${RESAMPLEMODEL} \
+    ${MNI_XFM:+-t ${MNI_XFM}} \
     -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n GenericLabel -o ${tmpdir}/${n}/mnimask_in_mni.mnc
 
 mincmath -clamp -const2 0 65535 ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
@@ -908,10 +910,12 @@ mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} \
   --source_mask ${tmpdir}/${n}/mnimask_in_mni.mnc --target_mask ${RESAMPLEMASK} --clobber ${tmpdir}/${n}/mni.norm.mnc
+
 mincbeast -verbose -fill -median -same_res -flip -v2 -conf ${BEASTLIBRARY_DIR}/default.1mm.conf ${BEASTLIBRARY_DIR} \
   ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] \
+  ${MNI_XFM:+-t [ ${MNI_XFM},1 ]} \
   -n GenericLabel --verbose \
   -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/bmask.mnc
 
