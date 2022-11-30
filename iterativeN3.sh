@@ -13,7 +13,7 @@
 # ARG_OPTIONAL_BOOLEAN([vessels],[],[Attempt to detect and exclude blood vessels],[off])
 # ARG_OPTIONAL_SINGLE([lsq6-resample-type],[],[(Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates", "none", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space],[none])
 # ARG_OPTIONAL_SINGLE([prior-config],[],[Config file to use for models and priors],[mni_icbm152_nlin_sym_09c.cfg])
-# ARG_OPTIONAL_BOOLEAN([fast-nlin],[],[Perform fast non-linear registration using Mattes similarity],[on])
+# ARG_OPTIONAL_BOOLEAN([fast-nlin],[],[Perform fast non-linear registration using Mattes similarity],[off])
 # ARG_OPTIONAL_BOOLEAN([save-nlin],[],[Save the non-linear transformation to the model, implies --no-fast-nlin])
 # ARG_OPTIONAL_BOOLEAN([clobber],[c],[Overwrite files that already exist])
 # ARG_OPTIONAL_BOOLEAN([verbose],[v],[Run commands verbosely],[on])
@@ -58,7 +58,7 @@ _arg_isostep="4"
 _arg_vessels="off"
 _arg_lsq6_resample_type="none"
 _arg_prior_config="mni_icbm152_nlin_sym_09c.cfg"
-_arg_fast_nlin="on"
+_arg_fast_nlin="off"
 _arg_save_nlin="off"
 _arg_clobber="off"
 _arg_verbose="on"
@@ -84,7 +84,7 @@ print_help()
 	printf '\t%s\n' "--vessels, --no-vessels: Attempt to detect and exclude blood vessels (off by default)"
 	printf '\t%s\n' "--lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be \"coordinates\", \"none\", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'none')"
 	printf '\t%s\n' "--prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')"
-	printf '\t%s\n' "--fast-nlin, --no-fast-nlin: Perform fast non-linear registration using Mattes similarity (on by default)"
+	printf '\t%s\n' "--fast-nlin, --no-fast-nlin: Perform fast non-linear registration using Mattes similarity (off by default)"
 	printf '\t%s\n' "--save-nlin, --no-save-nlin: Save the non-linear transformation to the model, implies --no-fast-nlin (off by default)"
 	printf '\t%s\n' "-c, --clobber, --no-clobber: Overwrite files that already exist (off by default)"
 	printf '\t%s\n' "-v, --verbose, --no-verbose: Run commands verbosely (on by default)"
