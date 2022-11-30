@@ -59,7 +59,7 @@ Usage: ./iterativeN3.sh [-h|--help] [--(no-)standalone] [--distance <arg>] [--le
         --vessels, --no-vessels: Attempt to detect and exclude blood vessels (off by default)
         --lsq6-resample-type: (Standalone) Type of resampling lsq6(rigid) output files undergo, can be "coordinates", "none", or a floating point value for the isotropic resolution in mni_icbm152_t1_tal_nlin_sym_09c space (default: 'none')
         --prior-config: Config file to use for models and priors (default: 'mni_icbm152_nlin_sym_09c.cfg')
-        --fast-nlin, --no-fast-nlin: Perform fast non-linear registration using Mattes similarity (on by default)
+        --fast-nlin, --no-fast-nlin: Perform fast non-linear registration using Mattes similarity (off by default)
         --save-nlin, --no-save-nlin: Save the non-linear transformation to the model, implies --no-fast-nlin (off by default)
         -c, --clobber, --no-clobber: Overwrite files that already exist (off by default)
         -v, --verbose, --no-verbose: Run commands verbosely (on by default)
@@ -83,3 +83,24 @@ If you want to provide your own priors, the following files are required:
 - (if your template is not in MNI space) `MNI_XFM`, an affine transform from your template to MNI ICBM NLIN SYM 09c space
 
 Generate a config file defining these variables and provide it to the ``--prior-config`` option.
+
+## Quality Control Outputs
+
+`iterativeN3.sh` provides 3 quality control images, which provide feedback on the success of the following stages
+- `<basename>.qc.bias.jpg`, alternating rows of the original image and the bias-corrected image
+- `<basename>.qc.mask.classified.jpg`, alternating rows of the brain mask image and the classified image
+- `<basename>.qc.bias.jpg`, alternating rows of the affine MNI outline image and the nlin MNI outline image
+
+Additionally, `<basename>.qc.webp` an animated image which combined the static images together.
+
+### Bias Field QC Example
+
+![Bias Field QC Example](examples/example.qc.bias.jpg)
+
+### Brain Mask and Classification QC Example
+
+![Brain Mask and Classification QC Example](examples/example.mask.classified.jpg)
+
+### Registration QC Example
+
+![Registration QC Example](examples/example.qc.registration.jpg)
