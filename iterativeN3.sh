@@ -400,6 +400,7 @@ function run_smart {
 BEASTLIBRARY_DIR="${QUARANTINE_PATH}/resources/BEaST_libraries/combined"
 RESAMPLEMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
 RESAMPLEMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
+RESAMPLEOUTLINE="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_outline.mnc"
 
 # Load configuration
 if [[ -s  ${_arg_prior_config} ]]; then
@@ -414,119 +415,133 @@ fi
 calc () { awk "BEGIN{ print $* }" ;}
 
 function make_qc() {
-    #Generate a standardized view of the final correct brain in MNI space, with classification overlayed
-    #Create animated version if img2webp is available
+    # Generate a standardized view of the final correct brain in MNI space, with classification overlayed
+    # Create animated version if img2webp is available
     mkdir -p ${tmpdir}/qc
 
-    #Resample into MNI space for all the inputs
+    # Resample into MNI space for all the inputs for standard visualization
+    # Classification
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/${n}/classify2.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+
+    # Mask
+    antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
+        -i ${tmpdir}/bmask_fix.mnc -o ${tmpdir}/qc/mask.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+
+    # Final Corrected Image
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+
+    # Original input image
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/origqcref.mnc -o ${tmpdir}/qc/orig.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+
+    # Warped Outline
+    antsApplyTransforms -d 3 -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
+        -i ${RESAMPLEOUTLINE} -o ${tmpdir}/qc/nlin_outline.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/corrected.mnc ${tmpdir}/qc/corrected.clamp.mnc
     mv -f ${tmpdir}/qc/corrected.clamp.mnc ${tmpdir}/qc/corrected.mnc
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/orig.mnc ${tmpdir}/qc/orig.clamp.mnc
     mv -f ${tmpdir}/qc/orig.clamp.mnc ${tmpdir}/qc/orig.mnc
 
-    #Create the bounding box for create_verify_image
+    # Create the bounding box for create_verify_image
     mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} $(mincbbox -mincresample ${tmpdir}/qc/classify.mnc) ${tmpdir}/qc/classify.mnc ${tmpdir}/qc/label-crop.mnc
     minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression '1' ${tmpdir}/qc/label-crop.mnc ${tmpdir}/qc/bounding.mnc
 
-    #Trasverse
-    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_classify.rgb \
-        -width 1920 -autocols 10 -autocol_planes t \
+    # Create Building Block Slices
+    for slicedir in t s c; do
+      # Corrected image in gray
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_corrected_gray.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535
+
+     # Corrected image in spectral
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_corrected_spect.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/corrected.mnc color:spect:0:65535
+
+      # Original image in gray
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_orig_gray.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/orig.mnc color:gray:0:65535
+
+      # Original image in spectral
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_orig_spect.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
+
+      # Corrected image with classification
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_classified.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
         volume_overlay:${tmpdir}/qc/classify.mnc:0.4
 
-    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_corrected.rgb \
-        -width 1920 -autocols 10 -autocol_planes t \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:spect:0:65535
-
-    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_corrected_gray.rgb \
-        -width 1920 -autocols 10 -autocol_planes t \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535
-
-    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_orig.rgb \
-        -width 1920 -autocols 10 -autocol_planes t \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
-
-    #Sagital
-    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_classify.rgb \
-        -width 1920 -autocols 10 -autocol_planes s \
+      # Corrected image with mask
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_mask.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
-        volume_overlay:${tmpdir}/qc/classify.mnc:0.4
+        volume_overlay:${tmpdir}/qc/mask.mnc:0.4:red
 
-    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_corrected.rgb \
-        -width 1920 -autocols 10 -autocol_planes s \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:spect:0:65535
-
-    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_corrected_gray.rgb \
-        -width 1920 -autocols 10 -autocol_planes s \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535
-
-    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_orig.rgb \
-        -width 1920 -autocols 10 -autocol_planes s \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
-
-    #Coronal
-    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_classify.rgb \
-        -width 1920 -autocols 10 -autocol_planes c \
+      # Corrected image with outline
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_outline.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
-        volume_overlay:${tmpdir}/qc/classify.mnc:0.4
+        volume_overlay:${RESAMPLEOUTLINE}:0.7:red
 
-    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_corrected.rgb \
-        -width 1920 -autocols 10 -autocol_planes c \
+      # Corrected image with nlin outline
+      create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_nlin_outline.rgb \
+        -width 1920 -autocols 10 -autocol_planes ${slicedir} \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:spect:0:65535
-
-    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_corrected_gray.rgb \
-        -width 1920 -autocols 10 -autocol_planes c \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535
-
-    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_orig.rgb \
-        -width 1920 -autocols 10 -autocol_planes c \
-        -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
+        volume_overlay:${tmpdir}/qc/nlin_outline.mnc:0.7:red
+    done
 
     convert -background black -strip -append \
-        ${tmpdir}/qc/cor_corrected.rgb \
-        ${tmpdir}/qc/cor_classify.rgb \
-        ${tmpdir}/qc/sag_corrected.rgb \
-        ${tmpdir}/qc/sag_classify.rgb \
-        ${tmpdir}/qc/trans_corrected.rgb \
-        ${tmpdir}/qc/trans_classify.rgb \
-        ${tmpdir}/qc/corrected.mpc
+      -interlace Plane -sampling-factor 4:2:0 -quality "85%" \
+      ${tmpdir}/qc/c_orig_spect.rgb \
+      ${tmpdir}/qc/c_corrected_spect.rgb \
+      ${tmpdir}/qc/s_orig_spect.rgb \
+      ${tmpdir}/qc/s_corrected_spect.rgb \
+      ${tmpdir}/qc/t_orig_spect.rgb \
+      ${tmpdir}/qc/t_corrected_spect.rgb \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.bias.jpg
 
     convert -background black -strip -append \
-        ${tmpdir}/qc/cor_orig.rgb \
-        ${tmpdir}/qc/cor_corrected_gray.rgb \
-        ${tmpdir}/qc/sag_orig.rgb \
-        ${tmpdir}/qc/sag_corrected_gray.rgb \
-        ${tmpdir}/qc/trans_orig.rgb \
-        ${tmpdir}/qc/trans_corrected_gray.rgb \
-        ${tmpdir}/qc/orig.mpc
+      -interlace Plane -sampling-factor 4:2:0 -quality "85%" \
+      ${tmpdir}/qc/c_mask.rgb \
+      ${tmpdir}/qc/c_classified.rgb \
+      ${tmpdir}/qc/s_mask.rgb \
+      ${tmpdir}/qc/s_classified.rgb \
+      ${tmpdir}/qc/t_mask.rgb \
+      ${tmpdir}/qc/t_classified.rgb \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.mask.classified.jpg
 
-    #Save static QC jpg
-    convert -background black -strip -interlace Plane -sampling-factor 4:2:0 -quality "85%" \
-        ${tmpdir}/qc/corrected.mpc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg
+    convert -background black -strip -append \
+      -interlace Plane -sampling-factor 4:2:0 -quality "85%" \
+      ${tmpdir}/qc/c_outline.rgb \
+      ${tmpdir}/qc/c_nlin_outline.rgb \
+      ${tmpdir}/qc/s_outline.rgb \
+      ${tmpdir}/qc/s_nlin_outline.rgb \
+      ${tmpdir}/qc/t_outline.rgb \
+      ${tmpdir}/qc/t_nlin_outline.rgb \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.registration.jpg
 
-    #If webp software is available animate a before/after image
+
+    # If webp software is available animate a before/after image
     if command -v img2webp; then
-        convert -background black ${tmpdir}/qc/corrected.mpc ${tmpdir}/qc/corrected.png
-        convert -background black ${tmpdir}/qc/orig.mpc ${tmpdir}/qc/orig.png
-        img2webp -d 750 -lossy -min_size ${tmpdir}/qc/orig.png ${tmpdir}/qc/corrected.png -o $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp || true
+        img2webp -d 1000 -lossy -min_size \
+          $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.bias.jpg \
+          $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.mask.classified.jpg \
+          $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.registration.jpg \
+          -o $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.webp || true
     fi
 }
 
