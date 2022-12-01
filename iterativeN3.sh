@@ -947,7 +947,7 @@ iMath 3 ${tmpdir}/${n}/bmask_fix.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
 cp -f ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/bmask_fix.mnc
 
 antsRegistration_affine_SyN.sh --clobber --verbose \
-    ${_arg_fast_nlin} --mask-extract \
+    ${_arg_fast_nlin} \
     --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
     --skip-linear --fixed-mask ${REGISTRATIONBRAINMASK} --moving-mask ${tmpdir}/${n}/bmask_fix.mnc \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
