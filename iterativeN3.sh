@@ -1027,19 +1027,19 @@ if [[ ${_arg_standalone} == "on" ]]; then
     minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
 
     if [[ -n ${DEEPGMPRIOR:-} ]]; then
-    Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
-        -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
-        -l [ 0.69314718055994530942,1 ] \
-        -i PriorProbabilityImages[ 4,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
-        -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
-        --winsorize-outliers BoxPlot
+      Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
+          -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
+          -l [ 0.69314718055994530942,1 ] \
+          -i PriorProbabilityImages[ 4,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
+          -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
+          --winsorize-outliers BoxPlot
     else
-    Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
-        -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 \
-        -l [ 0.69314718055994530942,1 ] \
-        -i PriorProbabilityImages[ 3,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
-        -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
-        --winsorize-outliers BoxPlot
+      Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
+          -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 \
+          -l [ 0.69314718055994530942,1 ] \
+          -i PriorProbabilityImages[ 3,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
+          -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
+          --winsorize-outliers BoxPlot
     fi
 
     # valuelow=$(mincstats -quiet -floor 1 -pctT 0.1 ${tmpdir}/corrected.mnc)
@@ -1051,7 +1051,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
     # Calculate ICV, referenced to model
     mincmath -not ${REGISTRATIONBRAINMASK} ${tmpdir}/${n}/model_antimask.mnc
     mincmath -not ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/${n}/bmask_fix_antimask.mnc
-    antsRegistration_affine_SyN.sh --clobber --verbose --convergence 1e-6 --histogram-matching \
+    antsRegistration_affine_SyN.sh --clobber --verbose --histogram-matching \
             --skip-nonlinear \
             --fixed-mask ${tmpdir}/${n}/model_antimask.mnc \
             --moving-mask ${tmpdir}/${n}/bmask_fix_antimask.mnc \
