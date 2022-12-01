@@ -843,7 +843,7 @@ mkdir -p ${tmpdir}/${n}
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
-antsRegistration_affine_SyN.sh --verbose --float --convergence 1e-6 --histogram-matching \
+antsRegistration_affine_SyN.sh --verbose --float --histogram-matching \
     --skip-nonlinear --fixed-mask ${REGISTRATIONBRAINMASK} \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
@@ -905,7 +905,7 @@ mkdir -p ${tmpdir}/${n}
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
- antsRegistration_affine_SyN.sh --clobber --verbose --close --convergence 1e-6 --histogram-matching \
+ antsRegistration_affine_SyN.sh --clobber --verbose --close --histogram-matching \
          --initial-transform ${tmpdir}/$(( n - 1 ))/mni0_GenericAffine.xfm \
          --skip-nonlinear \
          --fixed-mask ${REGISTRATIONBRAINMASK} \
