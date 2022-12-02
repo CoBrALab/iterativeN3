@@ -432,18 +432,29 @@ function make_qc() {
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
 
+    # Final Corrected Image with nlin
+    antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni1_NL.xfm -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
+        -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected_nlin.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+
     # Original input image
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/origqcref.mnc -o ${tmpdir}/qc/orig.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
 
-    # Warped Outline
-    antsApplyTransforms -d 3 -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
-        -i ${RESAMPLEOUTLINE} -o ${tmpdir}/qc/nlin_outline.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+    # Resample REGISTRATIONOUTLINE and use it if defined
+    if [[ -s ${REGISTRATIONOUTLINE:-} ]]; then
+      antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} \
+        -i ${REGISTRATIONOUTLINE} -o ${tmpdir}/qc/outline.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+      RESAMPLEOUTLINE=${tmpdir}/qc/outline.mnc
+    fi
+
 
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/corrected.mnc ${tmpdir}/qc/corrected.clamp.mnc
     mv -f ${tmpdir}/qc/corrected.clamp.mnc ${tmpdir}/qc/corrected.mnc
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/orig.mnc ${tmpdir}/qc/orig.clamp.mnc
     mv -f ${tmpdir}/qc/orig.clamp.mnc ${tmpdir}/qc/orig.mnc
+    mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/corrected_nlin.mnc ${tmpdir}/qc/corrected.clamp.mnc
+    mv -f ${tmpdir}/qc/corrected.clamp.mnc ${tmpdir}/qc/corrected_nlin.mnc
+
 
     # Create the bounding box for create_verify_image
     mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} $(mincbbox -mincresample ${tmpdir}/qc/classify.mnc) ${tmpdir}/qc/classify.mnc ${tmpdir}/qc/label-crop.mnc
@@ -500,8 +511,8 @@ function make_qc() {
       create_verify_image -range_floor 0 ${tmpdir}/qc/${slicedir}_nlin_outline.rgb \
         -width 1920 -autocols 10 -autocol_planes ${slicedir} \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
-        volume_overlay:${tmpdir}/qc/nlin_outline.mnc:0.7:red
+        -row ${tmpdir}/qc/corrected_nlin.mnc color:gray:0:65535 \
+        volume_overlay:${RESAMPLEOUTLINE}:0.7:red
     done
 
     convert -background black -strip -append \
