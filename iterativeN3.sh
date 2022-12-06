@@ -976,6 +976,9 @@ antsApplyTransforms -d 3 --verbose -i ${tmpdir}/$(( n - 1 ))/mnimask.mnc -r ${RE
     ${MNI_XFM:+-t ${MNI_XFM}} \
     -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n GenericLabel -o ${tmpdir}/${n}/mnimask_in_mni.mnc
 
+# Shrink the mask a bit to try to exclude non-brain tissue
+iMath 3 ${tmpdir}/${n}/mnimask_in_mni.mnc ME ${tmpdir}/${n}/mnimask_in_mni.mnc 2 1 ball 1
+
 mincmath -clamp -const2 0 65535 ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
