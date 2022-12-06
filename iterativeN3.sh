@@ -689,7 +689,10 @@ function classify_to_mask() {
 # Output checking
 if [[ "${_arg_clobber}" == "off" ]]; then
   for file in ${_arg_output} \
-              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).beastmask.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classifymask.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlinmask.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mergedmask.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior1.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior2.mnc \
@@ -700,10 +703,12 @@ if [[ "${_arg_clobber}" == "off" ]]; then
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_from_model.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).ICV.xfm \
-              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp \
-              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.webp \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.mask.classified.jpg \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.bias.jpg \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.registration.jpg \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
-              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mask.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mergedmask.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc; do
     if [[ -s "${file}" ]]; then
       failure "File ${file} already exists and --clobber not specified!"
