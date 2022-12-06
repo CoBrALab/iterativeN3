@@ -430,11 +430,11 @@ function make_qc() {
 
     # Final Corrected Image
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-        -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+        -i ${tmpdir}/denoise_corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
 
     # Final Corrected Image with nlin
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni1_NL.xfm -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-        -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected_nlin.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+        -i ${tmpdir}/denoise_corrected.mnc -o ${tmpdir}/qc/corrected_nlin.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
 
     # Original input image
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
@@ -1080,9 +1080,9 @@ if [[ ${_arg_standalone} == "on" ]]; then
     ImageMath 3 ${tmpdir}/corrected.mnc m ${tmpdir}/corrected.mnc ${tmpdir}/fgmask_fov.mnc
     ExtractRegionFromImageByMask 3 ${tmpdir}/corrected.mnc ${tmpdir}/repad.mnc ${tmpdir}/fgmask_fov.mnc 1 $(calc "int(10.0*4.0/${shrink})")
     cp -f ${tmpdir}/repad.mnc ${tmpdir}/corrected.mnc
+    minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
     mincresample -clobber -unsigned -short -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/corrected.mnc ${_arg_output}
-
-    minc_anlm --mt $(nproc) ${_arg_output} $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc
+    cp -f ${tmpdir}/denoise_corrected.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc
 
     # minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned \
     #     -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
