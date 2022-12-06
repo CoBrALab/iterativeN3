@@ -422,11 +422,11 @@ function make_qc() {
     # Resample into MNI space for all the inputs for standard visualization
     # Classification
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-        -i ${tmpdir}/${n}/classify2.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+        -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
 
-    # Mask
+    # Masks
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-        -i ${tmpdir}/bmask_fix.mnc -o ${tmpdir}/qc/mask.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+        -i ${tmpdir}/mergedmask.mnc -o ${tmpdir}/qc/mask.mnc -r ${RESAMPLEMODEL} -n GenericLabel
 
     # Final Corrected Image
     antsApplyTransforms -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm \
@@ -657,6 +657,34 @@ failure_handler() {
     echo "Failed at $lineno: $msg"
 }
 trap 'failure_handler ${LINENO} "$BASH_COMMAND"' ERR
+
+function classify_to_mask() {
+    # Convert classify image into a mask
+    # Mostly a clone of the supersteps of antsBrainExtraction
+    ResampleImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/classify1mm.mnc 1x1x1 0 1
+    ThresholdImage 3 ${tmpdir}/${n}/classify1mm.mnc ${tmpdir}/${n}/gm.mnc 2 2 1 0
+    ThresholdImage 3 ${tmpdir}/${n}/classify1mm.mnc ${tmpdir}/${n}/wm.mnc 3 3 1 0
+    if [[ -s ${tmpdir}/${n}/posterior4.mnc ]]; then
+      ThresholdImage 3 ${tmpdir}/${n}/classify1mm.mnc ${tmpdir}/${n}/deepgm.mnc 4 4 1 0
+      ImageMath 3 ${tmpdir}/${n}/gm.mnc addtozero ${tmpdir}/${n}/deepgm.mnc ${tmpdir}/${n}/gm.mnc
+    fi
+
+    ImageMath 3 ${tmpdir}/${n}/gm.mnc GetLargestComponent ${tmpdir}/${n}/gm.mnc
+    ImageMath 3 ${tmpdir}/${n}/wm.mnc GetLargestComponent ${tmpdir}/${n}/wm.mnc
+
+    ImageMath 3 ${tmpdir}/${n}/gm.mnc FillHoles ${tmpdir}/${n}/gm.mnc 2
+
+    ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/gm.mnc ${tmpdir}/${n}/wm.mnc
+
+    iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 1 1 ball 1
+    ImageMath 3 ${tmpdir}/${n}/classifymask.mnc GetLargestComponent ${tmpdir}/${n}/classifymask.mnc
+    iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 2 1 ball 1
+    ResampleImage 3 ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/${n}/nlin_mnimask1mm.mnc 1x1x1 0 1
+    iMath 3 ${tmpdir}/${n}/nlin_mnimask1mm_E.mnc ME ${tmpdir}/${n}/nlin_mnimask1mm.mnc 10 1 ball 1
+    ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/nlin_mnimask1mm.mnc
+    ImageMath 3 ${tmpdir}/${n}/classifymask.mnc FillHoles ${tmpdir}/${n}/classifymask.mnc 2
+    antsApplyTransforms -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/classifymask.mnc -r ${tmpdir}/${n}/classify.mnc -n GenericLabel --verbose
+}
 
 # Output checking
 if [[ "${_arg_clobber}" == "off" ]]; then
@@ -947,23 +975,16 @@ antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni
   -n GenericLabel --verbose \
   -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/bmask.mnc
 
-ImageMath 3 ${tmpdir}/${n}/bmask_temp.mnc m ${tmpdir}/${n}/bmask.mnc ${tmpdir}/vessels.mnc
-ThresholdImage 3 ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/bmask_fix.mnc Otsu 4 ${tmpdir}/${n}/bmask_temp.mnc
-ThresholdImage 3 ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/${n}/bmask_fix.mnc 2 Inf 1 0
-iMath 3 ${tmpdir}/${n}/bmask_fix.mnc ME ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/bmask_fix.mnc GetLargestComponent ${tmpdir}/${n}/bmask_fix.mnc
-iMath 3 ${tmpdir}/${n}/bmask_fix.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
-iMath 3 ${tmpdir}/${n}/bmask_fix.mnc MC ${tmpdir}/${n}/bmask_fix.mnc 5 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/bmask_fix.mnc FillHoles ${tmpdir}/${n}/bmask_fix.mnc 2
-iMath 3 ${tmpdir}/${n}/bmask_fix.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
+cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
-cp -f ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/bmask_fix.mnc
+ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/$(( n - 1 ))/mnimask.mnc ${tmpdir}/${n}/bmask.mnc
 
 antsRegistration_affine_SyN.sh --clobber --verbose \
     --histogram-matching \
     ${_arg_fast_nlin} \
+    --close \
     --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-    --skip-linear --fixed-mask ${REGISTRATIONBRAINMASK} --moving-mask ${tmpdir}/${n}/bmask_fix.mnc \
+    --fixed-mask ${REGISTRATIONBRAINMASK} --moving-mask ${tmpdir}/mergedmask.mnc \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
 antsApplyTransforms -d 3 -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
@@ -982,26 +1003,38 @@ if [[ -n ${DEEPGMPRIOR:-} ]]; then
       -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior4.mnc
 fi
 
-iMath 3 ${tmpdir}/${n}/bmask_D.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 1 1 ball 1
+antsApplyTransforms -d 3 -i ${REGISTRATIONBRAINMASK} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
+    -n GenericLabel --verbose \
+    -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/nlin_mnimask.mnc
 
-ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/bmask_D.mnc ${tmpdir}/vessels.mnc
+cp -f ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/nlin_mnimask.mnc
+
+ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/${n}/bmask.mnc
+
+iMath 3 ${tmpdir}/${n}/atropos_mask.mnc MD ${tmpdir}/mergedmask.mnc 1 1 ball 1
+
+ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/vessels.mnc
 ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/$(( n - 1 ))/hotmask.mnc
 
 if [[ -n ${DEEPGMPRIOR:-} ]]; then
   Atropos --verbose -d 3 -a ${tmpdir}/${n}/denoise.mnc -x ${tmpdir}/${n}/atropos_mask.mnc  -c [ 25, 0.005 ] \
       -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 0 ]  -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
       -l [ 0.69314718055994530942,1 ] \
-      -i PriorProbabilityImages[ 4,${tmpdir}/${n}/prior%d.mnc,0.25 ] -o [ ${tmpdir}/${n}/classify1.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
+      -i PriorProbabilityImages[ 4,${tmpdir}/${n}/prior%d.mnc,0.25 ] -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
       --winsorize-outliers BoxPlot
 else
   Atropos --verbose -d 3 -a ${tmpdir}/${n}/denoise.mnc -x ${tmpdir}/${n}/atropos_mask.mnc  -c [ 25, 0.005 ] \
       -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 0 ]  -s 1x2 -s 2x3 -s 1x3 \
       -l [ 0.69314718055994530942,1 ] \
-      -i PriorProbabilityImages[ 3,${tmpdir}/${n}/prior%d.mnc,0.25 ] -o [ ${tmpdir}/${n}/classify1.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
+      -i PriorProbabilityImages[ 3,${tmpdir}/${n}/prior%d.mnc,0.25 ] -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
       --winsorize-outliers BoxPlot
 fi
 
-ThresholdImage 3 ${tmpdir}/${n}/classify1.mnc ${tmpdir}/${n}/weight.mnc 2 Inf 1 0
+classify_to_mask
+
+ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/classifymask.mnc
+
+ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/weight.mnc 2 Inf 1 0
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
@@ -1014,9 +1047,10 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}
 _arg_isostep=$(calc "${_arg_isostep} / 2")
 
 n3input=${tmpdir}/${n}/denoise.mnc
+
 do_N3
 
-iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/${n}/bmask_fix.mnc 2 1 ball 1
+iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/mergedmask.mnc 2 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/correct_mask.mnc FillHoles ${tmpdir}/${n}/correct_mask.mnc
 
 mincmath -clobber -unsigned -double -mult ${tmpdir}/${n}/*field.mnc ${tmpdir}/${n}/field_combined.mnc
@@ -1040,22 +1074,32 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
 
+    iMath 3 ${tmpdir}/${n}/atropos_mask.mnc MD ${tmpdir}/mergedmask.mnc 1 1 ball 1
+
+    ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/vessels.mnc
+    ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/$(( n - 1 ))/hotmask.mnc
+
     if [[ -n ${DEEPGMPRIOR:-} ]]; then
       Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
           -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 -s 1x4 -s 3x4 \
           -l [ 0.69314718055994530942,1 ] \
           -i PriorProbabilityImages[ 4,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
-          -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
+          -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
           --winsorize-outliers BoxPlot
     else
       Atropos --verbose -d 3 -a ${tmpdir}/denoise_corrected.mnc -x ${tmpdir}/${n}/atropos_mask.mnc -c [ 25, 0.005 ] \
           -m [ 0.1,1x1x1 ] --posterior-formulation Aristotle[ 1 ] -s 1x2 -s 2x3 -s 1x3 \
           -l [ 0.69314718055994530942,1 ] \
           -i PriorProbabilityImages[ 3,${tmpdir}/${n}/posterior%d.mnc,0.25 ] \
-          -o [ ${tmpdir}/${n}/classify2.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
+          -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/posterior%d.mnc ] \
           --winsorize-outliers BoxPlot
     fi
 
+    classify_to_mask
+
+    ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/classifymask.mnc
+
+    # Disabled polynomial intensity stretching implementation
     # valuelow=$(mincstats -quiet -floor 1 -pctT 0.1 ${tmpdir}/corrected.mnc)
     # valuewm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 3 ${tmpdir}/corrected.mnc)
     # valuegm=$(mincstats -quiet -median -mask ${tmpdir}/${n}/classify2.mnc -mask_binvalue 2 ${tmpdir}/corrected.mnc)
@@ -1064,11 +1108,11 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     # Calculate ICV, referenced to model
     mincmath -not ${REGISTRATIONBRAINMASK} ${tmpdir}/${n}/model_antimask.mnc
-    mincmath -not ${tmpdir}/${n}/bmask_fix.mnc ${tmpdir}/${n}/bmask_fix_antimask.mnc
+    mincmath -not ${tmpdir}/mergedmask.mnc ${tmpdir}/${n}/mergedmask_antimask.mnc
     antsRegistration_affine_SyN.sh --clobber --verbose --histogram-matching \
             --skip-nonlinear \
             --fixed-mask ${tmpdir}/${n}/model_antimask.mnc \
-            --moving-mask ${tmpdir}/${n}/bmask_fix_antimask.mnc \
+            --moving-mask ${tmpdir}/${n}/mergedmask_antimask.mnc \
             ${tmpdir}/denoise_corrected.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/icv
 
     #Re pad final image using model FOV mask
@@ -1093,9 +1137,15 @@ if [[ ${_arg_standalone} == "on" ]]; then
     # mincresample -clobber -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
     #     $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc
 
-    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc \
-      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mask.mnc
-    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc \
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/bmask.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).beastmaskmask.mnc
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/nlin_mnimask.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlinmask.mnc
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/classifymask.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classifymask.mnc
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/mergedmask.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mergedmask.mnc
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify.mnc \
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc
 
     # Resample to output the posterior probabilities from classification
@@ -1134,7 +1184,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
       fi
 
       mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
-          -keep -near -unsigned -byte -labels ${tmpdir}/bmask_fix.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mask.mnc
+          -keep -near -unsigned -byte -labels ${tmpdir}/mergedmask.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mergedmask.mnc
       mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
           -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc
     fi
