@@ -900,7 +900,17 @@ ImageMath 3 ${tmpdir}/fgmask_fov.mnc m ${tmpdir}/$(( n - 1 ))/fgmask.mnc ${tmpdi
 cp -f ${tmpdir}/$(( n - 1 ))/fgmask.mnc ${tmpdir}/fgmask.mnc
 
 antsApplyTransforms -d 3 -i ${REGISTRATIONBRAINMASK} \
-    -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] \
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] \
+    -n GenericLabel --verbose -r ${tmpdir}/input.mnc \
+    -o ${tmpdir}/${n}/mnimask.mnc
+
+antsRegistration_affine_SyN.sh --clobber --verbose --close --histogram-matching \
+    --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
+    --skip-nonlinear --fixed-mask ${REGISTRATIONBRAINMASK} --moving-mask ${tmpdir}/${n}/mnimask.mnc \
+    ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
+
+antsApplyTransforms -d 3 -i ${REGISTRATIONBRAINMASK} \
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] \
     -n GenericLabel --verbose -r ${tmpdir}/input.mnc \
     -o ${tmpdir}/${n}/mnimask.mnc
 
