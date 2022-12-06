@@ -669,6 +669,8 @@ if [[ "${_arg_clobber}" == "off" ]]; then
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).posterior4.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).affine_to_model.xfm \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_from_model.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).ICV.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).webp \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).jpg \
@@ -1108,8 +1110,11 @@ if [[ ${_arg_standalone} == "on" ]]; then
     cp -f ${tmpdir}/${n}/icv0_GenericAffine.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).ICV.xfm
     if [[ ${_arg_save_nlin} == "on" ]]; then
       cp -f ${tmpdir}/3/mni1_NL.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm
+      cp -f ${tmpdir}/3/mni1_inverse_NL.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_from_model.xfm
       cp -f ${tmpdir}/3/mni1_NL_grid_0.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model_grid_0.mnc
+      cp -f ${tmpdir}/3/mni1_inverse_NL_grid_0.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_from_model_grid_0.mnc
       sed -i "s/mni1_NL_grid_0.mnc/$(basename ${_arg_output} .mnc).nlin_to_model_grid_0.mnc/g" $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_to_model.xfm
+      sed -i "s/mni1_inverse_NL_grid_0.mnc/$(basename ${_arg_output} .mnc).nlin_from_model_grid_0.mnc/g" $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlin_from_model.xfm
     fi
 
     if [[ "${_arg_lsq6_resample_type}" != "none" ]]; then
