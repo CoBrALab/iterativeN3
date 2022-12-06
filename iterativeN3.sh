@@ -1015,7 +1015,7 @@ antsApplyTransforms -d 3 -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.x
     -n Linear --verbose \
     -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior1.mnc
 
-if [[ -n ${DEEPGMPRIOR:-} ]]; then
+if [[ -s ${DEEPGMPRIOR:-} ]]; then
   antsApplyTransforms -d 3 -i ${DEEPGMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/mni1_inverse_NL.xfm \
       -n Linear --verbose \
       -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/prior4.mnc
