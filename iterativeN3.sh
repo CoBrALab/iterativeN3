@@ -708,6 +708,7 @@ if [[ "${_arg_clobber}" == "off" ]]; then
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.bias.jpg \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).qc.registration.jpg \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
+              $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.xfm \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mergedmask.mnc \
               $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc; do
     if [[ -s "${file}" ]]; then
@@ -936,6 +937,7 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/vessels.mnc
 
 n3input=${tmpdir}/${n}/denoise.mnc
+
 do_N3
 
 iMath 3 ${tmpdir}/${n}/correct_mask.mnc MD ${tmpdir}/${n}/mnimask.mnc 2 1 ball 1
@@ -1201,6 +1203,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
           $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc
       fi
 
+      cp -f ${tmpdir}/lsq6.xfm $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.xfm
       mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
           -keep -near -unsigned -byte -labels ${tmpdir}/mergedmask.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mergedmask.mnc
       mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
