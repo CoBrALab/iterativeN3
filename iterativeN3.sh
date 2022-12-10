@@ -890,7 +890,7 @@ mkdir -p ${tmpdir}/${n}
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
-antsRegistration_affine_SyN.sh --verbose --float --histogram-matching \
+antsRegistration_affine_SyN.sh --verbose --histogram-matching \
     --skip-nonlinear --fixed-mask ${REGISTRATIONBRAINMASK} \
     ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
