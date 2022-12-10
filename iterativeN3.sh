@@ -1148,7 +1148,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
     cp -f ${tmpdir}/repad.mnc ${tmpdir}/corrected.mnc
     minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
     mincresample -clobber -unsigned -short -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/corrected.mnc ${_arg_output}
-    cp -f ${tmpdir}/denoise_corrected.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc
+    mincresample -clobber -unsigned -short -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/corrected.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).denoise.mnc
 
     # minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -short -unsigned \
     #     -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
