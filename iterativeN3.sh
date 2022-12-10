@@ -970,6 +970,14 @@ minc_anlm --clobber --mt $(nproc) ${tmpdir}/$(( n - 1 ))/correct.mnc ${tmpdir}/$
          --moving-mask ${tmpdir}/$(( n - 1 ))/mnimask.mnc \
          ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
+ antsRegistration_affine_SyN.sh --clobber --verbose --histogram-matching \
+         --linear-type lsq9 \
+         --skip-nonlinear \
+         --fixed-mask ${REGISTRATIONBRAINMASK} \
+         --moving-mask ${tmpdir}/$(( n - 1 ))/mnimask.mnc \
+         ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni_lsq9
+
+# LSQ12 resample
 antsApplyTransforms -d 3 --verbose -i ${tmpdir}/${n}/denoise.mnc -r ${RESAMPLEMODEL} \
     ${MNI_XFM:+-t ${MNI_XFM}} \
     -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc
@@ -978,26 +986,48 @@ antsApplyTransforms -d 3 --verbose -i ${tmpdir}/$(( n - 1 ))/mnimask.mnc -r ${RE
     ${MNI_XFM:+-t ${MNI_XFM}} \
     -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n GenericLabel -o ${tmpdir}/${n}/mnimask_in_mni.mnc
 
+# LSQ9 resample
+antsApplyTransforms -d 3 --verbose -i ${tmpdir}/${n}/denoise.mnc -r ${RESAMPLEMODEL} \
+    ${MNI_XFM:+-t ${MNI_XFM}} \
+    -t ${tmpdir}/${n}/mni_lsq90_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni_lsq9.mnc
+
+antsApplyTransforms -d 3 --verbose -i ${tmpdir}/$(( n - 1 ))/mnimask.mnc -r ${RESAMPLEMODEL} \
+    ${MNI_XFM:+-t ${MNI_XFM}} \
+    -t ${tmpdir}/${n}/mni_lsq90_GenericAffine.xfm -n GenericLabel -o ${tmpdir}/${n}/mnimask_in_mni_lsq9.mnc
+
 # Shrink the mask a bit to try to exclude non-brain tissue
 iMath 3 ${tmpdir}/${n}/mnimask_in_mni.mnc ME ${tmpdir}/${n}/mnimask_in_mni.mnc 2 1 ball 1
+iMath 3 ${tmpdir}/${n}/mnimask_in_mni_lsq9.mnc ME ${tmpdir}/${n}/mnimask_in_mni_lsq9.mnc 2 1 ball 1
 
 mincmath -clamp -const2 0 65535 ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
+mincmath -clamp -const2 0 65535 ${tmpdir}/${n}/mni_lsq9.mnc ${tmpdir}/${n}/mni_lsq9.clamp.mnc
+mv -f ${tmpdir}/${n}/mni_lsq9.clamp.mnc ${tmpdir}/${n}/mni_lsq9.mnc
+
 volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} \
   --source_mask ${tmpdir}/${n}/mnimask_in_mni.mnc --target_mask ${RESAMPLEMASK} --clobber ${tmpdir}/${n}/mni.norm.mnc
+
+volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni_lsq9.mnc ${RESAMPLEMODEL} \
+  --source_mask ${tmpdir}/${n}/mnimask_in_mni_lsq9.mnc --target_mask ${RESAMPLEMASK} --clobber ${tmpdir}/${n}/mni_lsq9.norm.mnc
 
 mincbeast -verbose -fill -median -same_res -flip -v2 -conf ${BEASTLIBRARY_DIR}/default.1mm.conf ${BEASTLIBRARY_DIR} \
   ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
+mincbeast -verbose -fill -median -same_res -flip -v2 -conf ${BEASTLIBRARY_DIR}/default.1mm.conf ${BEASTLIBRARY_DIR} \
+  ${tmpdir}/${n}/mni_lsq9.norm.mnc ${tmpdir}/${n}/beastmask_lsq9.mnc
+
 antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] \
   ${MNI_XFM:+-t [ ${MNI_XFM},1 ]} \
   -n GenericLabel --verbose \
-  -r ${tmpdir}/input.mnc -o ${tmpdir}/${n}/bmask.mnc
+  -r ${tmpdir}/input.mnc -o ${tmpdir}/bmask.mnc
 
-cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
+antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask_lsq9.mnc -t [ ${tmpdir}/${n}/mni_lsq90_GenericAffine.xfm,1 ] \
+  ${MNI_XFM:+-t [ ${MNI_XFM},1 ]} \
+  -n GenericLabel --verbose \
+  -r ${tmpdir}/input.mnc -o ${tmpdir}/bmask_lsq9.mnc
 
-ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/$(( n - 1 ))/mnimask.mnc ${tmpdir}/${n}/bmask.mnc
+ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/$(( n - 1 ))/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/bmask_lsq9.mnc
 
 antsRegistration_affine_SyN.sh --clobber --verbose \
     --histogram-matching \
@@ -1029,11 +1059,9 @@ antsApplyTransforms -d 3 -i ${REGISTRATIONBRAINMASK} -t [ ${tmpdir}/${n}/mni0_Ge
 
 cp -f ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/nlin_mnimask.mnc
 
-ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/${n}/bmask.mnc
+ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/bmask_lsq9.mnc
 
-iMath 3 ${tmpdir}/${n}/atropos_mask.mnc MD ${tmpdir}/mergedmask.mnc 1 1 ball 1
-
-ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/vessels.mnc
+ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/mergedmask.mnc ${tmpdir}/vessels.mnc
 ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/$(( n - 1 ))/hotmask.mnc
 
 if [[ -n ${DEEPGMPRIOR:-} ]]; then
@@ -1052,7 +1080,11 @@ fi
 
 classify_to_mask
 
-ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/classifymask.mnc
+ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/classifymask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/bmask_lsq9.mnc
+
+for file in ${tmpdir}/${n}/posterior?.mnc ${tmpdir}/${n}/classify.mnc; do
+  ImageMath 3 ${file} m ${file} ${tmpdir}/mergedmask.mnc
+done
 
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/weight.mnc 2 Inf 1 0
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
@@ -1094,9 +1126,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     minc_anlm --clobber --mt $(nproc) ${tmpdir}/corrected.mnc ${tmpdir}/denoise_corrected.mnc
 
-    iMath 3 ${tmpdir}/${n}/atropos_mask.mnc MD ${tmpdir}/mergedmask.mnc 1 1 ball 1
-
-    ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/vessels.mnc
+    ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/mergedmask.mnc ${tmpdir}/vessels.mnc
     ImageMath 3 ${tmpdir}/${n}/atropos_mask.mnc m ${tmpdir}/${n}/atropos_mask.mnc ${tmpdir}/$(( n - 1 ))/hotmask.mnc
 
     if [[ -n ${DEEPGMPRIOR:-} ]]; then
@@ -1117,7 +1147,11 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     classify_to_mask
 
-    ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/classifymask.mnc
+    ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/${n}/nlin_mnimask.mnc ${tmpdir}/classifymask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/bmask_lsq9.mnc
+
+    for file in ${tmpdir}/${n}/posterior?.mnc ${tmpdir}/${n}/classify.mnc; do
+      ImageMath 3 ${file} m ${file} ${tmpdir}/mergedmask.mnc
+    done
 
     # Disabled polynomial intensity stretching implementation
     # valuelow=$(mincstats -quiet -floor 1 -pctT 0.1 ${tmpdir}/corrected.mnc)
@@ -1128,11 +1162,11 @@ if [[ ${_arg_standalone} == "on" ]]; then
 
     # Calculate ICV, referenced to model
     mincmath -not ${REGISTRATIONBRAINMASK} ${tmpdir}/${n}/model_antimask.mnc
-    mincmath -not ${tmpdir}/mergedmask.mnc ${tmpdir}/${n}/mergedmask_antimask.mnc
+    mincmath -not ${tmpdir}/mergedmask.mnc ${tmpdir}/${n}/antimask.mnc
     antsRegistration_affine_SyN.sh --clobber --verbose --histogram-matching \
             --skip-nonlinear \
             --fixed-mask ${tmpdir}/${n}/model_antimask.mnc \
-            --moving-mask ${tmpdir}/${n}/mergedmask_antimask.mnc \
+            --moving-mask ${tmpdir}/${n}/antimask.mnc \
             ${tmpdir}/denoise_corrected.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/icv
 
     #Re pad final image using model FOV mask
@@ -1165,6 +1199,10 @@ if [[ ${_arg_standalone} == "on" ]]; then
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classifymask.mnc
     mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/mergedmask.mnc \
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).mergedmask.mnc
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/bmask.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).beastmask.mnc
+    mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/bmask_lsq9.mnc \
+      $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).beastmask_lsq9.mnc
     mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify.mnc \
       $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).classify.mnc
 
