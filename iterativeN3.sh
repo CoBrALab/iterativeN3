@@ -1166,8 +1166,6 @@ if [[ ${_arg_standalone} == "on" ]]; then
   # mincresample -clobber -tfm_input_sampling -transform ${tmpdir}/transform_to_input.xfm ${tmpdir}/rescale.mnc \
   #     $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).rescale.mnc
 
-  mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/bmask.mnc \
-    $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).beastmaskmask.mnc
   mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/nlin_mnimask.mnc \
     $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).nlinmask.mnc
   mincresample -clobber -like ${_arg_output} -transform ${tmpdir}/transform_to_input.xfm -keep -near -unsigned -byte -labels ${tmpdir}/classifymask.mnc \
