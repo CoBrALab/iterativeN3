@@ -881,7 +881,7 @@ antsApplyTransforms -d 3 -i ${REGISTRATIONBRAINMASK} \
   -n GenericLabel --verbose -r ${tmpdir}/input.mnc \
   -o ${tmpdir}/${n}/mnimask.mnc
 
-antsRegistration_affine_SyN.sh --clobber --verbose --close --histogram-matching \
+antsRegistration_affine_SyN.sh --clobber --verbose --close \
   --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
   --skip-nonlinear --fixed-mask ${REGISTRATIONBRAINMASK} --moving-mask ${tmpdir}/${n}/mnimask.mnc \
   ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
@@ -939,14 +939,14 @@ mkdir -p ${tmpdir}/${n}
 
 minc_anlm --clobber --mt $(nproc) ${tmpdir}/$((n - 1))/correct.mnc ${tmpdir}/${n}/denoise.mnc
 
-antsRegistration_affine_SyN.sh --clobber --verbose --close --histogram-matching \
+antsRegistration_affine_SyN.sh --clobber --verbose --close \
   --initial-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
   --skip-nonlinear \
   --fixed-mask ${REGISTRATIONBRAINMASK} \
   --moving-mask ${tmpdir}/$((n - 1))/mnimask.mnc \
   ${tmpdir}/${n}/denoise.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/mni
 
-antsRegistration_affine_SyN.sh --clobber --verbose --histogram-matching \
+antsRegistration_affine_SyN.sh --clobber --verbose \
   --linear-type lsq9 \
   --skip-nonlinear \
   --fixed-mask ${REGISTRATIONBRAINMASK} \
@@ -1006,7 +1006,6 @@ antsApplyTransforms -d 3 -i ${tmpdir}/${n}/beastmask_lsq9.mnc -t [ ${tmpdir}/${n
 ImageMath 3 ${tmpdir}/mergedmask.mnc MajorityVoting ${tmpdir}/$((n - 1))/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/bmask_lsq9.mnc
 
 antsRegistration_affine_SyN.sh --clobber --verbose \
-  --histogram-matching \
   ${_arg_fast_nlin} \
   --close \
   --initial-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
@@ -1138,7 +1137,8 @@ if [[ ${_arg_standalone} == "on" ]]; then
   # Calculate ICV, referenced to model
   mincmath -not ${REGISTRATIONBRAINMASK} ${tmpdir}/${n}/model_antimask.mnc
   mincmath -not ${tmpdir}/mergedmask.mnc ${tmpdir}/${n}/antimask.mnc
-  antsRegistration_affine_SyN.sh --clobber --verbose --histogram-matching \
+
+  antsRegistration_affine_SyN.sh --clobber --verbose \
     --skip-nonlinear \
     --fixed-mask ${tmpdir}/${n}/model_antimask.mnc \
     --moving-mask ${tmpdir}/${n}/antimask.mnc \
