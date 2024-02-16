@@ -1218,7 +1218,7 @@ if [[ ${_arg_standalone} == "on" ]]; then
     mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
       -keep -near -unsigned -byte -labels ${tmpdir}/mergedmask.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mergedmask.mnc
     mincresample -clobber -transform ${tmpdir}/lsq6.xfm -like $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.mnc \
-      -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify2.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc
+      -keep -near -unsigned -byte -labels ${tmpdir}/${n}/classify.mnc $(dirname ${_arg_output})/$(basename ${_arg_output} .mnc).lsq6.classify.mnc
   fi
 else
   mincresample -fillvalue 1 -like ${tmpdir}/originput.mnc ${tmpdir}/${n}/field_combined_correct_clamp.mnc \
