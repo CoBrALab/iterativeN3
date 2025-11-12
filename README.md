@@ -1,3 +1,8 @@
+# DEPRECATED
+
+Please see https://github.com/CoBrALab/synthstrip_N3 instead for a human T1 preprocessing pipeline
+
+
 # iterativeN3 - a multi-stage MRI preprocessing pipeline
 
 iterativeN3 is an MRI preprocessing pipeline, which at its core is intended
